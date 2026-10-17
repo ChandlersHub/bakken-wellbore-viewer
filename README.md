@@ -183,3 +183,59 @@ The helper preserves all source geometry/properties and adds separate display
 geometry, provenance, containment checks and an audit. It requires NAD83 input.
 The current local snapshot has 10,572 nested-band records and one original-outline
 fallback. Generated geometry remains local.
+
+### Select a DSU: wells and combined monthly production
+
+Enable **Inspect DSUs instead of wells** and click a box, choose an overlapping
+record, or use the DSU search. The associated well paths are highlighted in cyan;
+other paths dim. Production ribbons on the selected group retain full opacity.
+The sidebar shows whole-well combined monthly oil, coverage, reported period
+volume and a well list. **Play group production** uses the existing monthly
+timeline. Clear the DSU selection or hide the layer to restore the operator scope.
+Operator filters intersect both the highlighted group and its production totals.
+A direct link accepts `?dataset=full&dsu=STABLE_DSU_ID`.
+
+Membership uses exact XY clipping of classified section-4 lateral segments against
+the original source footprint. It unions exact shared/retraced linework within
+each permit/API10 well, excludes point-only touches and unsupported MD gaps over
+1,000 ft, and retains every well branch for highlighting. Display insets and
+depth separation never affect membership. This is geometric association, not
+legal assignment, completion attribution, ownership or a verified bench match.
+The default rule requires 660 ft of lateral inside; users can choose any positive
+length or at least half of the well's supported lateral length. This threshold
+is an inspection choice, not a regulatory setback or drainage assumption.
+
+Monthly volumes count each matching physical well once across its branches. They
+are whole-well reported oil across pools, not prorated by clipped path length.
+Missing reports are not zero; partial months are marked in the group chart.
+Overlapping DSU group totals must not be summed as exclusive allocations. Available
+production still ends in December 2024. The index validates the current full
+survey's manifest SHA256 and branch identities; other datasets require a rebuild.
+
+Prepare the optional association index with `requirements-dsu.txt` installed:
+
+```sh
+python prepare_dsu_membership.py viewer/data/dsu/drilling-spacing-units.geojson full-dataset viewer/data/dsu/dsu-well-membership.json
+node tests/dsu-production.mjs
+```
+
+The Python helper requires prepared station tiles and aligned MD metrics. The
+generated index/audit stays in ignored `viewer/data/dsu/`. Synthetic Node tests
+need no external data; optional prepared data can be checked with `--data PATH`.
+
+### Inventory methodology review
+
+The September scenario is retained as a legacy model under review, not a current
+validated count of remaining drillable wells. An October 17 local audit examines
+overlap allocation versus engineering capacity, exclusive well assignments,
+geometry-fingerprint reproducibility, well-count versus length-equivalent measures,
+unknown benches and validation requirements. The populated installation includes
+`viewer/inventory-review.html`; detailed retained-model audit outputs stay local
+and are not published in this source repository.
+
+The proposed replacement uses actual PLSS township/section land accounting,
+within-well lateral union, explicitly chosen development layouts and persistent
+candidate corridor IDs across overlapping DSU alternatives. Township aggregation
+must use the shared nonoverlapping ledger rather than sum the old DSU estimates.
+No replacement inventory or calibrated development probability is claimed by
+this viewer feature.

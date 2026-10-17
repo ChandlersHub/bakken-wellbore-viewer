@@ -6,7 +6,7 @@ import {createOperatorModel} from '../viewer/operator-model.js';
 import {createProductionModel} from '../viewer/production-model.js';
 await fs.mkdir('work',{recursive:true});
 const url=p=>pathToFileURL(process.cwd()+'/'+p).href;
-const rewrite=s=>s.replace("from 'three'",`from '${url('viewer/vendor/three.module.js')}'`).replace("from './operator-model.js'",`from '${url('viewer/operator-model.js')}'`).replace("from './production-model.js'",`from '${url('viewer/production-model.js')}'`);
+const rewrite=s=>s.replace("from 'three'",`from '${url('viewer/vendor/three.module.js')}'`).replace("from './operator-model.js'",`from '${url('viewer/operator-model.js')}'`).replace("from './production-model.js'",`from '${url('viewer/production-model.js')}'`).replace("from './production-history.js'",`from '${url('viewer/production-history.js')}'`);
 const moduleAt=async p=>{const temp='work/operator-test-'+p.split('/').at(-1)+'.mjs';await fs.writeFile(temp,rewrite(await fs.readFile(p,'utf8')));return import(url(temp))};
 class Element{constructor(){this.children=[];this.options=[];this.style={};this.value='';this.attributes={};this.classList={add(){}}}append(...v){this.children.push(...v)}replaceChildren(...v){this.children=v}setAttribute(k,v){this.attributes[k]=v}}
 const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)};

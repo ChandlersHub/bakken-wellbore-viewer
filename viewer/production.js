@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createProductionModel,symbolWidth,playbackPeriods} from './production-model.js';
+import {renderScopeHistory} from './production-history.js';
 
 const $=id=>document.getElementById(id),fmt=n=>n.toLocaleString('en-US',{maximumFractionDigits:0});
 const monthLabel=s=>new Date(s+'-01T12:00:00Z').toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'});
@@ -9,7 +10,9 @@ uniform vec2 textureSize;
 uniform float productionEnabled;
 attribute float productionIndex;
 attribute vec3 surveyColor;
+attribute float groupSelected;
 varying vec3 surveyTint;
+varying float groupEmphasis;
 varying float quantity;
 varying float wellIndex;
 float oilAt(float index){
@@ -28,6 +31,7 @@ uniform float surveyColorEnabled;
 varying vec3 surveyTint;
 varying float quantity;
 varying float wellIndex;
+varying float groupEmphasis;
 void main(){
   if(ribbon>0.5&&(productionEnabled<0.5||quantity<=0.0))discard;
   vec3 color=lime;
@@ -35,6 +39,7 @@ void main(){
   if(surveyColorEnabled>0.5)color=surveyTint;
   float alpha=opacity;
   if(selectedIndex!=-1.0&&abs(wellIndex-selectedIndex)<0.25)alpha=1.0;
+  if(groupEmphasis>0.5)alpha=1.0;
   gl_FragColor=vec4(color,alpha);
   #include <colorspace_fragment>
 }`;
@@ -45,7 +50,7 @@ uniform vec2 viewport;
 uniform float referenceWidth;
 uniform float cameraNear;
 void main(){
-  quantity=oilAt(productionIndex);wellIndex=productionIndex;surveyTint=surveyColor;
+  quantity=oilAt(productionIndex);wellIndex=productionIndex;surveyTint=surveyColor;groupEmphasis=groupSelected;
   vec4 a=modelViewMatrix*vec4(segmentStart,1.0);
   vec4 b=modelViewMatrix*vec4(segmentEnd,1.0);
   float plane=-cameraNear*1.001;
@@ -65,23 +70,24 @@ void main(){
 }`;
 
 export function createProductionController(){
-  let model=null,month=0,enabled=false,playing=false,lastTick=0,selected=null,generation=0,periods=[],period={start:0,end:0};
+  let model=null,month=0,enabled=false,playing=false,lastTick=0,selected=null,generation=0,periods=[],period={start:0,end:0},scopeLabel='',scopeHistory=null,highlightIds=null,requestedScopeIds=null;
   let texture=new THREE.DataTexture(new Float32Array([-1]),1,1,THREE.RedFormat,THREE.FloatType);texture.needsUpdate=true;
   const views=new Set();
   const uniforms={oilTexture:{value:texture},textureSize:{value:new THREE.Vector2(1,1)},productionEnabled:{value:0},surveyColorEnabled:{value:0},lime:{value:new THREE.Color('#a3ff12')},missingColor:{value:new THREE.Color('#708391')},selectedIndex:{value:-1},viewport:{value:new THREE.Vector2(1,1)},referenceWidth:{value:10},cameraNear:{value:1}};
-  function material(ribbon){return new THREE.ShaderMaterial({uniforms:{...uniforms,opacity:{value:1},ribbon:{value:ribbon?1:0}},vertexShader:ribbon?ribbonVertex:`${lookup}\nvoid main(){quantity=oilAt(productionIndex);wellIndex=productionIndex;surveyTint=surveyColor;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,fragmentShader:fragment,transparent:true,depthWrite:false,side:THREE.DoubleSide})}
+  function material(ribbon){return new THREE.ShaderMaterial({uniforms:{...uniforms,opacity:{value:1},ribbon:{value:ribbon?1:0}},vertexShader:ribbon?ribbonVertex:`${lookup}\nvoid main(){quantity=oilAt(productionIndex);wellIndex=productionIndex;surveyTint=surveyColor;groupEmphasis=groupSelected;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,fragmentShader:fragment,transparent:true,depthWrite:false,side:THREE.DoubleSide})}
   function stop(){playing=false;$('productionPlay').textContent='Play';$('productionPlay').setAttribute('aria-pressed','false')}
   function setEnabled(value){enabled=!!value&&!!model;uniforms.productionEnabled.value=enabled?1:0;$('productionEnabled').checked=enabled;$('productionTimeline').hidden=!enabled;for(const v of views)v.mesh.visible=enabled;if(!enabled)stop();selection(selected)}
-  function reset(){generation++;stop();model=null;selected=null;uniforms.selectedIndex.value=-1;setEnabled(false);$('productionEnabled').disabled=true;$('productionStatus').textContent='Checking monthly production…';$('productionDetails').hidden=true}
+  function reset(){generation++;stop();model=null;selected=null;scopeLabel='';scopeHistory=null;highlightIds=null;requestedScopeIds=null;uniforms.selectedIndex.value=-1;setEnabled(false);$('productionEnabled').disabled=true;$('productionStatus').textContent='Checking monthly production…';$('productionDetails').hidden=true}
+  function drawScopeHistory(){const host=$('dsuProduction');if(!host)return;if(!model||!scopeHistory){host.replaceChildren();if(scopeHistory)host.textContent='Monthly production is unavailable for this dataset.';return}renderScopeHistory(host,{...scopeHistory,matchedWells:model.scopeIndices.length,months:model.metadata.months,summaries:model.summaries,period,month})}
   function drawLegend(){const width=uniforms.referenceWidth.value;$('productionSizeValue').textContent=`${width} px at 10,000 bbl`;$('productionLegend').replaceChildren();for(const oil of [1000,10000,40000]){const row=document.createElement('div');row.className='production-key';const bar=document.createElement('i');bar.style.height=symbolWidth(oil,width)+'px';const label=document.createElement('span');label.textContent=fmt(oil)+' bbl';row.append(bar,label);$('productionLegend').append(row)}}
   function setMonth(value){
     if(!model)return;month=Math.max(period.start,Math.min(period.end,Number(value)||0));
     model.uploadMonth(month,texture.image.data);texture.needsUpdate=true;
     const date=model.metadata.months[month],s=model.summaries[month];$('productionMonth').value=String(month);$('productionMonth').setAttribute('aria-valuetext',monthLabel(date));$('productionDate').value=date;$('productionDateLabel').textContent=monthLabel(date);
-    $('productionSummary').textContent=s.reported?`${fmt(s.barrels)} bbl · ${fmt(s.producing)} producing well${s.producing===1?'':'s'}`:'No reported values for this month';
+    $('productionSummary').textContent=(scopeHistory&&scopeLabel?scopeLabel+' · ':'')+(s.reported?`${fmt(s.barrels)} bbl · ${fmt(s.producing)} producing well${s.producing===1?'':'s'}`:'No reported values for this month');
     $('productionCoverage').textContent=`${fmt(s.reported)} of ${fmt(model.scopeIndices.length)} matched well${model.scopeIndices.length===1?'':'s'} reported. Totals count each well once.`;
     $('productionPrevious').disabled=month===period.start;$('productionNext').disabled=month===period.end;
-    selection(selected);
+    selection(selected);drawScopeHistory();
   }
   function setPeriod(index){
     stop();period=periods[index];$('productionPeriod').value=String(index);
@@ -97,7 +103,7 @@ export function createProductionController(){
       const data=new Float32Array(await read(raw.valuesFile||raw.file||'oil.bin'));if(version!==generation)return;
       const next=createProductionModel(raw,data,survey.wells);
       if(!next.scopeIndices.length){$('productionStatus').textContent='No production records match these survey wells.';return}
-      model=next;texture.dispose();const width=Math.min(1024,Math.max(1,next.count)),height=Math.ceil(next.count/width);
+      model=next;if(requestedScopeIds!==null)model.setBranchScope(requestedScopeIds);texture.dispose();const width=Math.min(1024,Math.max(1,next.count)),height=Math.ceil(next.count/width);
       texture=new THREE.DataTexture(new Float32Array(width*height).fill(-1),width,height,THREE.RedFormat,THREE.FloatType);texture.needsUpdate=true;texture.minFilter=texture.magFilter=THREE.NearestFilter;
       uniforms.oilTexture.value=texture;uniforms.textureSize.value.set(width,height);
       $('productionEnabled').disabled=false;$('productionDetails').hidden=false;
@@ -112,13 +118,15 @@ export function createProductionController(){
     const ids=line.userData.ids,indices=new Float32Array(ids.length),vertices=new Float32Array(ids.length*2);
     for(let i=0;i<ids.length;i++){const p=model.renderByBranch[ids[i]]??-1;indices[i]=p;vertices[i*2]=vertices[i*2+1]=p}
     line.geometry.setAttribute('productionIndex',new THREE.BufferAttribute(vertices,1));
+    const scopeVertices=new THREE.BufferAttribute(new Float32Array(ids.length*2),1),scopeInstances=new THREE.InstancedBufferAttribute(new Float32Array(ids.length),1);line.geometry.setAttribute('groupSelected',scopeVertices);
+    for(let i=0;i<ids.length;i++)if(highlightIds?.has(ids[i])){scopeVertices.setX(i*2,1);scopeVertices.setX(i*2+1,1);scopeInstances.setX(i,1)}
     let color=line.geometry.attributes.color;if(!color){const array=new Float32Array(ids.length*6),c=new THREE.Color('#a3ff12');for(let i=0;i<array.length;i+=3){array[i]=c.r;array[i+1]=c.g;array[i+2]=c.b}color=new THREE.BufferAttribute(array,3);line.geometry.setAttribute('color',color)}
     line.geometry.setAttribute('surveyColor',color);line.material.dispose();line.material=material(false);
     const g=new THREE.InstancedBufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([0,-1,0,1,-1,0,1,1,0,0,1,0],3));g.setIndex([0,1,2,0,2,3]);
     const endpoints=new THREE.InstancedInterleavedBuffer(line.geometry.attributes.position.array,6);
     g.setAttribute('segmentStart',new THREE.InterleavedBufferAttribute(endpoints,3,0));g.setAttribute('segmentEnd',new THREE.InterleavedBufferAttribute(endpoints,3,3));g.setAttribute('productionIndex',new THREE.InstancedBufferAttribute(indices,1));g.instanceCount=ids.length;const colors=new THREE.InstancedInterleavedBuffer(color.array,6);g.setAttribute('surveyColor',new THREE.InterleavedBufferAttribute(colors,3,0));
-    const mesh=new THREE.Mesh(g,material(true));mesh.frustumCulled=false;mesh.visible=enabled;mesh.raycast=()=>{};line.add(mesh);
-    const view={line,mesh,endpoints,colors};views.add(view);line.userData.production=view;line.geometry.addEventListener('dispose',()=>views.delete(view));
+    g.setAttribute('groupSelected',scopeInstances);const mesh=new THREE.Mesh(g,material(true));mesh.frustumCulled=false;mesh.visible=enabled;mesh.raycast=()=>{};line.add(mesh);
+    const view={line,mesh,endpoints,colors,scopeVertices,scopeInstances,ids};views.add(view);line.userData.production=view;line.geometry.addEventListener('dispose',()=>views.delete(view));
   }
   function syncLine(line,opacity=1){const v=line.userData.production;if(!v)return;v.endpoints.needsUpdate=true;line.material.uniforms.opacity.value=opacity;v.mesh.material.uniforms.opacity.value=opacity}
   function selection(w){
@@ -139,7 +147,10 @@ export function createProductionController(){
   $('productionSize').oninput=e=>{uniforms.referenceWidth.value=+e.target.value;drawLegend()};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
   return {load,reset,decorate,syncLine,selection,setSurveyColoring:active=>{uniforms.surveyColorEnabled.value=active?1:0},ready:()=>!!model,
-    setBranchScope(ids=null){if(!model)return;model.setBranchScope(ids);const raw=model.metadata;$('productionStatus').textContent=`${monthLabel(raw.months[0])}–${monthLabel(raw.months.at(-1))} · ${fmt(model.scopeIndices.length)} matched well${model.scopeIndices.length===1?'':'s'}${ids===null?'':' in operator filter'}`;setMonth(month)},
+    setBranchScope(ids=null,label='operator filter'){scopeLabel=ids===null?'':label;requestedScopeIds=ids===null?null:[...ids];if(!model)return;model.setBranchScope(ids);const raw=model.metadata;$('productionStatus').textContent=`${monthLabel(raw.months[0])}–${monthLabel(raw.months.at(-1))} · ${fmt(model.scopeIndices.length)} matched well${model.scopeIndices.length===1?'':'s'}${scopeLabel?' in '+scopeLabel:''}`;setMonth(month)},
+    setScopeHistory(value){scopeHistory=value;drawScopeHistory()},
+    highlightBranches(ids=null){highlightIds=ids===null?null:new Set(ids);for(const v of views){for(let i=0;i<v.ids.length;i++){const value=highlightIds?.has(v.ids[i])?1:0;v.scopeVertices.setX(i*2,value);v.scopeVertices.setX(i*2+1,value);v.scopeInstances.setX(i,value)}v.scopeVertices.needsUpdate=true;v.scopeInstances.needsUpdate=true}},
+    playScope(){if(!model||!model.scopeIndices.length)return;setEnabled(true);let first=period.start;while(first<period.end&&!model.summaries[first].reported)first++;setMonth(first);playing=true;lastTick=0;$('productionPlay').textContent='Pause';$('productionPlay').setAttribute('aria-pressed','true')},
     update(t,camera,width,height){uniforms.viewport.value.set(Math.max(1,width),Math.max(1,height));uniforms.cameraNear.value=camera.near;if(!playing)return;if(!lastTick){lastTick=t;return}if(t-lastTick>=1000/Number($('productionSpeed').value)){lastTick=t;if(month>=period.end)stop();else setMonth(month+1)}},
     pickPixels(w){if(!enabled||!model)return 5;const oil=w?model.value(month,model.indexOf(w)):model.summaries[month].maximumOil;return Math.max(5,symbolWidth(oil,uniforms.referenceWidth.value)/2+3)}
   };
