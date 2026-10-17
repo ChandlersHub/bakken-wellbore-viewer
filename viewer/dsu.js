@@ -5,10 +5,13 @@ const $=id=>document.getElementById(id),fmt=n=>Number(n).toLocaleString('en-US',
 const MODE_LABELS={acres:'Published spacing acres',remaining:'Remaining wells · saved model',development:'Development · saved model',confidence:'Confidence · saved model',type:'Spacing-unit type'};
 const METHODS={local_paired_tops:'Nearby paired Lodgepole and Birdbear tops',local_separate_tops:'Separate nearby Lodgepole and Birdbear controls',lodgepole_plus_800ft:'Nearby Lodgepole top + assumed 800 ft thickness',lateral_minus800_plus200:'Nearest lateral depths −800 / +200 ft',regional_9000_10000:'Regional 9,000–10,000 ft display fallback'};
 const metricFmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:1});
-export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
+export function createDSUController(root,{focus,say,selectionChanged=()=>{},footageRequested=()=>{}}){
   const group=new THREE.Group();group.name='Approximate DSU zones';group.visible=false;root.add(group);
   const raycaster=new THREE.Raycaster();let manifest=null,units=[],displayed=[],metadata=null,mesh=null,pickMesh=null,edges=null,batch=null,highlight=null,selected=null,generation=0,loading=null,loaded=false;
   let topOffset=0,bottomOffset=0,mode='acreage',opacity=.09,filter='all',layout='nested',depthStep=0;
+  let footageAnalysis=null,colorRange=[0,100];
+  const footageMode=()=>mode.startsWith('footage-');
+  const colorForUnit=unit=>footageMode()?new THREE.Color(footageAnalysis?.color(unit,mode.slice(8))||'#6b7280'):dsuColor(unit,mode,colorRange);
   const dispose=o=>{o.geometry?.dispose();o.material?.dispose();o.removeFromParent()};
   function clear(notify=true){for(const o of [...group.children])dispose(o);mesh=pickMesh=edges=highlight=null;batch=null;selected=null;displayed=[];$('dsuSelection').replaceChildren();$('dsuOverlaps').replaceChildren();if(notify)selectionChanged(null)}
   function clearSelection(){if(highlight){dispose(highlight);highlight=null}selected=null;$('dsuSelection').replaceChildren();$('dsuOverlaps').replaceChildren();selectionChanged(null)}
@@ -17,6 +20,12 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
   const faceOpacity=()=>Math.min(.65,opacity*(layout==='nested'?1.7:1));
   const edgeOpacity=()=>Math.min(.9,.35+opacity*2);
   function legend(){
+    if(footageMode()){
+      $('dsuAcreageLegend').hidden=true;$('dsuColorbar').hidden=false;
+      $('dsuColorbar').style.background=footageAnalysis?.gradient||'linear-gradient(90deg,#30123b,#4685fa,#1ae4b6,#a4fc3b,#f9ba38,#e3440a,#7a0403)';
+      $('dsuLegend').textContent=footageAnalysis?.legend(mode.slice(8))||'Footage analysis is loading or unavailable · gray = unavailable';
+      $('dsuModelNote').hidden=false;$('dsuModelNote').textContent='Footage scenarios use all surveyed operators and original footprints. Mapped lateral feet are a drilling proxy; completion and target assignments are unverified. September results remain in the saved-model color options.';return;
+    }
     const range=dsuScale(units,mode),bar=$('dsuColorbar');bar.hidden=mode==='acreage';bar.style.background=mode==='type'?'linear-gradient(90deg,#70c5e8 50%,#cda3ff 50%)':`linear-gradient(90deg,${(DSU_PALETTES[mode]||DSU_PALETTES.acres).join(',')})`;
     $('dsuAcreageLegend').hidden=mode!=='acreage';$('dsuAcreageLegend').replaceChildren();
     if(mode==='acreage')for(const [acres,color] of Object.entries(DSU_ACREAGE_COLORS)){const item=document.createElement('span'),swatch=document.createElement('i');swatch.style.background=color;const label=document.createElement('b');label.textContent=fmt(acres)+' ac';item.append(swatch,label);$('dsuAcreageLegend').append(item)}
@@ -28,8 +37,8 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
   function status(){if(loaded){$('dsuStatus').textContent=`${fmt(displayed.length)} of ${fmt(units.length)} DSU records · DMR ${metadata?.retrievedAtUTC?.slice(0,10)||''}. Overlapping units remain separate.`;$('dsuOverlapNote').textContent=layout==='source'?'Source footprints · no inward or depth separation offsets.':`Nested display: 1,280 ac → 100 ft inset; 1,920 → 220 ft; 2,560 → 340 ft; 3,840 → 460 ft. Bands are 50 ft wide. ${depthStep?'Exploded view: larger acreage classes are lifted '+fmt(depthStep)+' ft per level. ':'Depth separation is off. '}Display offsets are not setbacks or legal boundaries and do not change acreage or inventory.${units.some(u=>!u.nested)?' Units without prepared bands use source outlines.':''}${units.some(u=>u.nested?.fallback)?' Narrow footprints use their original unfilled outline.':''}`;$('dsuDepthSeparation').disabled=layout==='source'}}
   function render(){
     if(!loaded)return;
-    const previous=selected,next=filtered();clear(false);displayed=next;
-    batch=buildDSUPrisms(displayed,{topOffset,bottomOffset,mode,range:dsuScale(units,mode),layout,depthStep});
+    const previous=selected,next=filtered();clear(false);displayed=next;colorRange=dsuScale(units,mode);
+    batch=buildDSUPrisms(displayed,{topOffset,bottomOffset,mode,range:dsuScale(units,mode),layout,depthStep,colorForUnit});
     mesh=new THREE.Mesh(batch.geometry,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:faceOpacity(),side:THREE.DoubleSide,depthWrite:false}));mesh.renderOrder=-8;group.add(mesh);
     pickMesh=mesh;if(batch.pickGeometry!==batch.geometry){pickMesh=new THREE.Mesh(batch.pickGeometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));pickMesh.visible=false;group.add(pickMesh)}
     edges=new THREE.LineSegments(batch.edgeGeometry,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:edgeOpacity(),depthWrite:false}));edges.renderOrder=-7;group.add(edges);
@@ -37,8 +46,8 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
   }
   function recolor(){
     if(!batch)return;
-    const range=dsuScale(units,mode),colors=mesh.geometry.attributes.color,edgeColors=edges.geometry.attributes.color;
-    displayed.forEach((unit,i)=>{const c=dsuColor(unit,mode,range),r=batch.ranges[i];for(let v=r.start;v<r.end;v++)colors.setXYZ(v,c.r,c.g,c.b);for(let v=r.edgeStart;v<r.edgeEnd;v++)edgeColors.setXYZ(v,c.r,c.g,c.b)});
+    const range=dsuScale(units,mode),colors=mesh.geometry.attributes.color,edgeColors=edges.geometry.attributes.color;colorRange=range;
+    displayed.forEach((unit,i)=>{const c=colorForUnit(unit),r=batch.ranges[i];for(let v=r.start;v<r.end;v++)colors.setXYZ(v,c.r,c.g,c.b);for(let v=r.edgeStart;v<r.edgeEnd;v++)edgeColors.setXYZ(v,c.r,c.g,c.b)});
     colors.needsUpdate=true;edgeColors.needsUpdate=true;legend();
   }
   function select(unit){
@@ -54,7 +63,8 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
     const displayNote=document.createElement('p');displayNote.className='caption';const lift=dsuDisplayInterval(unit,{topOffset,bottomOffset,layout,depthStep}).lift;displayNote.textContent=layout==='nested'?`Display inset: ${fmt(p.display?.insetFt||0)} ft${p.display?.fallback?' · original outline fallback':''}. ${lift?'Exploded view lift: '+fmt(lift)+' ft above the interval listed; source depths unchanged.':'No depth separation.'}`:'Source footprint; no inset or depth separation.';
     const zone=p.zone,note=document.createElement('p');note.className='caption';note.textContent=`Approximate zone. ${METHODS[zone?.method]||zone?.method||'Regional display fallback'}. Birdbear top is a proxy for the Three Forks base. ${zone?.sourceDate?'Controls: '+zone.sourceDate+'. ':''}${Number.isFinite(zone?.nearestKm)?`${zone.nSamples} control${zone.nSamples===1?'':'s'} · ${metricFmt(zone.nearestKm)}–${metricFmt(zone.furthestKm)} km away. `:''}Depths are provisional TVD below each well’s reference; elevations are not applied. Published orders control the legal interval.`;
     host.append(tag,title,zoom,isolate,dl,displayNote,note);
-    if(!['acres','acreage','type'].includes(mode)){const metric=document.createElement('p');metric.className='caption';const v=dsuValue(unit,mode);metric.textContent=`${MODE_LABELS[mode]}: ${v===null?'unavailable / review':metricFmt(v)+(mode==='remaining'?'':mode==='confidence'?' / 100':'%')}. Scenario: 2026-09-12.`;host.append(metric)}
+    if(!footageMode()&&!['acres','acreage','type'].includes(mode)){const metric=document.createElement('p');metric.className='caption';const v=dsuValue(unit,mode);metric.textContent=`${MODE_LABELS[mode]}: ${v===null?'unavailable / review':metricFmt(v)+(mode==='remaining'?'':mode==='confidence'?' / 100':'%')}. Scenario: 2026-09-12.`;host.append(metric)}
+    if(footageAnalysis)host.append(footageAnalysis.panel(unit));
     const id=document.createElement('small');id.className='caption';id.textContent='Record '+p.sourceRecord+' · '+unit.id;host.append(id);
     selectionChanged(unit);
   }
@@ -76,7 +86,7 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
   }
   async function setVisible(value){$('dsuEnabled').checked=value;group.visible=value;$('dsuDetails').hidden=!value;if(!value){$('dsuInspect').checked=false;clearSelection();return}await ensureLoaded()}
   $('dsuEnabled').onchange=e=>setVisible(e.target.checked);
-  $('dsuColor').onchange=e=>{mode=e.target.value;recolor();if(selected)select(selected)};
+  $('dsuColor').onchange=e=>{mode=e.target.value;footageRequested(footageMode()?mode.slice(8):null);recolor();if(selected)select(selected)};
   $('dsuFilter').onchange=e=>{filter=e.target.value;render();results()};
   $('dsuOpacity').oninput=e=>{opacity=+e.target.value/100;$('dsuOpacityValue').textContent=e.target.value+'%';if(mesh)mesh.material.opacity=faceOpacity();if(edges)edges.material.opacity=edgeOpacity()};
   $('dsuLayout').onchange=e=>{layout=e.target.value;$('dsuDepthSeparationValue').textContent=layout==='source'?'Off (source view)':depthStep?depthStep+' ft / level':'Off';render()};
@@ -88,6 +98,8 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{}}){
   $('dsuSearch').oninput=results;
   return {
     setVisible,
+    setFootageAnalysis(value){footageAnalysis=value;recolor();if(selected)select(selected)},
+    useFootageMetric(metric){if(!metric&&!footageMode())return;mode=metric?'footage-'+metric:'acreage';$('dsuColor').value=mode;recolor();if(selected)select(selected)},
     clearSelection,
     async openUnit(id,zoom=true){const version=generation;await setVisible(true);if(version!==generation)return false;const unit=units.find(u=>u.id===id);if(!unit){say('This spacing unit is not in the installed DSU snapshot.');return false}select(unit);if(zoom)focus(bounds(unit));return true},
     setDataset(m){generation++;manifest=m;loading=null;loaded=false;units=[];metadata=null;clear();if(filter==='selected'){filter='all';$('dsuFilter').value='all'}$('dsuResults').replaceChildren();$('dsuSearch').value='';$('dsuStatus').textContent='Published footprints with approximate formation-depth boxes.';if(group.visible)ensureLoaded()},

@@ -76,7 +76,7 @@ export function dsuDisplayInterval(unit,{topOffset=0,bottomOffset=0,layout='sour
   const lift=layout==='nested'?rank*Math.max(0,Number.isFinite(depthStep)?depthStep:0):0;
   return {top:top-lift,bottom:bottom-lift,lift,zoneTop:top,zoneBottom:bottom};
 }
-export function buildDSUPrisms(units,{topOffset=0,bottomOffset=0,mode='acres',range=dsuScale(units,mode),layout='source',depthStep=0}={}){
+export function buildDSUPrisms(units,{topOffset=0,bottomOffset=0,mode='acres',range=dsuScale(units,mode),layout='source',depthStep=0,colorForUnit=null}={}){
   const positions=[],edges=[],colors=[],edgeColors=[],owners=[],ranges=[],pickPositions=[],pickOwners=[];
   units.forEach((unit,owner)=>{
     const {top,bottom}=dsuDisplayInterval(unit,{topOffset,bottomOffset,layout,depthStep}),start=positions.length/3,edgeStart=edges.length/3;
@@ -102,7 +102,7 @@ export function buildDSUPrisms(units,{topOffset=0,bottomOffset=0,mode='acres',ra
         const a=ring[i],b=ring[(i+1)%ring.length];pickTriangle(point(a,top),point(b,top),point(b,bottom));pickTriangle(point(a,top),point(b,bottom),point(a,bottom));
       }
     }
-    const color=dsuColor(unit,mode,range),end=positions.length/3,edgeEnd=edges.length/3;
+    const color=colorForUnit?colorForUnit(unit):dsuColor(unit,mode,range),end=positions.length/3,edgeEnd=edges.length/3;
     for(let i=start;i<end;i++)colors.push(color.r,color.g,color.b);
     for(let i=edgeStart;i<edgeEnd;i++)edgeColors.push(color.r,color.g,color.b);
     ranges.push({start,end,edgeStart,edgeEnd});

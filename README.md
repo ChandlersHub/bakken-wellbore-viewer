@@ -11,6 +11,7 @@ A local interactive 3D viewer for public North Dakota well surveys and productio
 - Independent color ranges by well section, with custom limits.
 - Operator colors, a searchable operator identity, an operator filter, and a fit-to-filter button. Production totals follow the operator filter.
 - Monthly oil playback with lateral display width proportional to the square root of monthly barrels.
+- DSU and township lateral-footage scenarios with Turbo colors, editable low/base/high densities, and retained September results for comparison.
 - Gamma-ray and conventional CBL amplitude overlays on observed vertical survey branches.
 - Local canvas recording studios for the cluster showcase and statewide tour.
 
@@ -233,9 +234,46 @@ unknown benches and validation requirements. The populated installation includes
 `viewer/inventory-review.html`; detailed retained-model audit outputs stay local
 and are not published in this source repository.
 
-The proposed replacement uses actual PLSS township/section land accounting,
-within-well lateral union, explicitly chosen development layouts and persistent
-candidate corridor IDs across overlapping DSU alternatives. Township aggregation
-must use the shared nonoverlapping ledger rather than sum the old DSU estimates.
-No replacement inventory or calibrated development probability is claimed by
-this viewer feature.
+The footage comparison described below uses PLSS township land accounting and
+within-well lateral union. Explicit development layouts and persistent candidate
+corridor IDs across overlapping DSU alternatives remain future work. Township
+aggregation uses a township-clipped spatial ledger rather than summing DSU estimates;
+inspect reported township gaps and overlaps before summing regional totals.
+No calibrated capacity, feasible-location count or development probability is claimed.
+
+### Lateral-footage scenarios: DSUs and townships
+
+Enable **Show footage scenarios** under **Lateral footage inventory**. Choose
+DSUs or townships, a low/base/high capacity scenario, and surveyed lateral feet,
+development percentage or scenario feet remaining. Enable **Inspect DSUs instead
+of wells** to click DSUs; township inspection starts enabled. Selecting a unit shows
+all three scenarios. The DSU inspector retains **Compare September 12 results**; historical
+values are not overwritten. Township search and **Zoom to township** aid navigation.
+Use `/viewer/?dataset=full&inventory=township&scenario=base` for the township view.
+
+The editable defaults are **49.5 / 66 / 82.5 ft per acre**. Base translates the
+historical eight two-mile wells per 1,280 acres into footage; low/high are ±25%
+illustrations. These are comparison assumptions, not calibrated development limits.
+The method measures classified survey lateral plan footage, not verified completed
+intervals. Capacity and footage use the same original DSU footprint or the same
+DSU-covered township portion. Overlapping DSUs must not be summed.
+
+Turbo colors use 0–100% for development and a layer-wide P98 cap for feet.
+Footage color endpoints stay fixed across scenario switches; DSUs and townships
+have separate ranges. Values above the color cap remain visible numerically.
+Gray means unavailable. The all-operator inventory calculation is independent
+of well display filters.
+
+Copy the prepared installation's `viewer/data/inventory/` alongside its matching
+`viewer/data/dsu/` and `full-dataset/` when moving computers. All remain ignored
+by Git. A mismatched or absent snapshot is reported as unavailable. For a fresh
+build, install `requirements-footage.txt` and follow
+[the footage method and preparation instructions](docs/footage-inventory.md).
+
+Source-only validation (no external datasets):
+
+```sh
+node tests/footage-model.mjs
+node tests/footage-controller.mjs
+python -m unittest discover -s tests -p "test_prepare_footage.py" -v
+```

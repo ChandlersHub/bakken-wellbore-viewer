@@ -1,0 +1,4 @@
+# Optional: regenerate the mapped-footage and full-township scenario inputs.
+-r requirements-dsu.txt
+geopandas>=0.14,<2
+pyogrio>=0.7,<1

@@ -25,6 +25,7 @@ local-settings.json
 work/
 
 viewer/data/dsu/
+viewer/data/inventory/
 
 # Local inventory audit generated from retained model snapshots
 viewer/inventory-review.html
