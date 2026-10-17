@@ -1,0 +1,3 @@
+# Optional: regenerating DSU display geometry and source-coordinate depth controls.
+shapely
+pyproj

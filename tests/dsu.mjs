@@ -20,7 +20,7 @@ try{
 await fs.writeFile(path.join(temporary,'reference.mjs'),(await fs.readFile(path.join(viewerPath,'reference-plane.js'),'utf8')).replace("from 'three'",`from '${sourceUrl('vendor/three.module.js')}'`));
 await fs.writeFile(path.join(temporary,'model.mjs'),(await fs.readFile(path.join(viewerPath,'dsu-model.js'),'utf8')).replace("from 'three'",`from '${sourceUrl('vendor/three.module.js')}'`).replace("from './reference-plane.js'",`from '${temporaryUrl('reference.mjs')}'`));
 await fs.writeFile(path.join(temporary,'controller.mjs'),(await fs.readFile(path.join(viewerPath,'dsu.js'),'utf8')).replace("from 'three'",`from '${sourceUrl('vendor/three.module.js')}'`).replace("from './dsu-model.js'",`from '${temporaryUrl('model.mjs')}'`));
-const {prepareDSUs,buildDSUPrisms,zoneInterval,dsuScale,dsuValue,dsuColor}=await import(temporaryUrl('model.mjs'));
+const {prepareDSUs,buildDSUPrisms,zoneInterval,dsuDisplayInterval,dsuScale,dsuValue,dsuColor,DSU_ACREAGE_COLORS}=await import(temporaryUrl('model.mjs'));
 const {projectReference}=await import(temporaryUrl('reference.mjs'));
 const {createDSUController}=await import(temporaryUrl('controller.mjs'));
 
@@ -32,9 +32,19 @@ const feature=(id,geometry,extra={})=>({type:'Feature',id,geometry,properties:{i
   zone:{topFt:100,bottomFt:200,method:'test',reference:'test relative TVD'},...extra}});
 const fixtures={type:'FeatureCollection',metadata:{sourceCRS:'EPSG:4269',retrievedAtUTC:'2026-10-17'},features:[
   feature('hole',{type:'Polygon',coordinates:[square(0,0,.01),square(0,0,.003)]}),
-  feature('multipart',{type:'MultiPolygon',coordinates:[[square(.04,0,.005)],[square(.06,0,.005)]]}),
-  feature('concave',{type:'Polygon',coordinates:[ring([[-.06,0],[-.04,0],[-.04,.005],[-.055,.005],[-.055,.02],[-.06,.02],[-.06,0]])]})
+  feature('multipart',{type:'MultiPolygon',coordinates:[[square(.04,0,.005)],[square(.06,0,.005)]]},{acres:2560}),
+  feature('concave',{type:'Polygon',coordinates:[ring([[-.06,0],[-.04,0],[-.04,.005],[-.055,.005],[-.055,.02],[-.06,.02],[-.06,0]])]}),
+  feature('narrow',{type:'Polygon',coordinates:[ring([[.09,-.005],[.0901,-.005],[.0901,.005],[.09,.005],[.09,-.005]])]})
 ]};
+fixtures.features[0].properties.display={insetFt:100,bandWidthFt:50,fallback:false,
+  outlineGeometry:{type:'Polygon',coordinates:[square(0,0,.009),square(0,0,.004)]},
+  bandGeometry:{type:'MultiPolygon',coordinates:[[square(0,0,.009),square(0,0,.0085)],[square(0,0,.0045),square(0,0,.004)]]}};
+fixtures.features[1].properties.display={insetFt:340,bandWidthFt:50,fallback:false,
+  outlineGeometry:{type:'MultiPolygon',coordinates:[[square(.04,0,.0045)],[square(.06,0,.0045)]]},
+  bandGeometry:{type:'MultiPolygon',coordinates:[[square(.04,0,.0045),square(.04,0,.004)],[square(.06,0,.0045),square(.06,0,.004)]]}};
+fixtures.features[3].properties.display={insetFt:100,bandWidthFt:50,fallback:true,
+  outlineGeometry:structuredClone(fixtures.features[3].geometry),bandGeometry:null};
+const unchangedFixtures=JSON.stringify(fixtures);
 const units=prepareDSUs(fixtures,manifest);
 const signedArea=points=>points.reduce((area,a,i)=>{const b=points[(i+1)%points.length];return area+a.x*b.y-b.x*a.y;},0)/2;
 const footprintArea=unit=>unit.polygons.reduce((area,rings)=>area+Math.abs(signedArea(rings[0]))-rings.slice(1).reduce((holes,hole)=>holes+Math.abs(signedArea(hole)),0),0);
@@ -57,7 +67,8 @@ for(const unit of units){
   const batch=buildDSUPrisms([unit]);const p=batch.geometry.attributes.position.array;let area=0;
   for(let i=0;i<p.length;i+=9)if(p[i+1]===-100&&p[i+4]===-100&&p[i+7]===-100)
     area+=Math.abs((p[i+3]-p[i])*(p[i+8]-p[i+2])-(p[i+6]-p[i])*(p[i+5]-p[i+2]))/2;
-  assert.ok(Math.abs(area-footprintArea(unit))/footprintArea(unit)<1e-6,unit.id+' triangulated cap area');
+  // Float32 positions at this map offset lose proportionally more precision in a narrow sliver.
+  assert.ok(Math.abs(area-footprintArea(unit))/footprintArea(unit)<(unit.id==='narrow'?1e-3:1e-6),unit.id+' triangulated cap area');
   assert.equal(batch.owners.length,batch.geometry.attributes.position.count/3);
 }
 const holeBatch=buildDSUPrisms([units[0]]),holeMesh=meshFrom(holeBatch);
@@ -102,12 +113,56 @@ assert.equal(dsuColor(missing,'remaining',[0,16]).getHexString(),'6b7280');
 assert.equal(dsuColor(review,'remaining',[0,16]).getHexString(),'6b7280');
 assert.notDeepEqual(dsuColor(zero,'remaining',[0,16]),dsuColor(missing,'remaining',[0,16]));
 
+// Nested display geometry is separate from source footprints and source depths.
+const classColors={640:'#18a8a6',1280:'#12ca2c',1920:'#277df4',2560:'#ff8b1f',3840:'#9d63de',5120:'#db4b94'};
+assert.deepEqual(DSU_ACREAGE_COLORS,classColors);
+for(const [acres,color] of Object.entries(classColors))assert.equal(dsuColor({properties:{acres:+acres}},'acreage',[0,100]).getHexString(),color.slice(1));
+assert.equal(dsuColor({properties:{acres:999}},'acreage',[0,100]).getHexString(),'8c9baa');
+const sourceShape=JSON.stringify(units.map(unit=>({polygons:unit.polygons,bounds:unit.bounds,zone:unit.properties.zone})));
+const nestedBatch=buildDSUPrisms(units,{layout:'nested',mode:'acreage'}),nestedMesh=meshFrom(nestedBatch);
+const nestedPick=meshFrom({geometry:nestedBatch.pickGeometry});
+assert.notEqual(nestedBatch.pickGeometry,nestedBatch.geometry);
+assert.equal(nestedBatch.pickOwners.length,nestedBatch.pickGeometry.attributes.position.count/3);
+assert.equal(new Set(nestedBatch.pickOwners).size,units.length,'every source record retains a pickable full footprint');
+assert.equal(units[0].nested.outline[0].length,2,'nested outline retains its hole');
+assert.equal(units[1].nested.outline.length,2,'nested outline retains disconnected islands');
+assert.equal(hitAt(nestedMesh,0,0).length,0);assert.equal(hitAt(nestedPick,0,0).length,0);
+assert.equal(hitAt(nestedMesh,.05,0).length,0);assert.equal(hitAt(nestedPick,.05,0).length,0);
+assert.equal(hitAt(nestedMesh,.0448,0).length,0,'inset band does not fill the original outer margin');
+const originalMarginHits=hitAt(nestedPick,.0448,0);assert.ok(originalMarginHits.length>0);
+assert.ok(originalMarginHits.every(hit=>nestedBatch.pickOwners[hit.faceIndex]===1),'full source margin retains the correct owner');
+const narrowRange=nestedBatch.ranges[3];assert.equal(narrowRange.start,narrowRange.end,'vanished narrow inset falls back to an unfilled outline');
+assert.ok(narrowRange.edgeEnd>narrowRange.edgeStart,'narrow fallback remains visibly outlined');
+const narrowHits=hitAt(nestedPick,.09005,0);assert.ok(narrowHits.length>0);
+assert.ok(narrowHits.every(hit=>nestedBatch.pickOwners[hit.faceIndex]===3));
+function containsRing(points,x,z){let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){
+  const a=points[j],b=points[i];if((a.y>z)!==(b.y>z)&&x<(b.x-a.x)*(z-a.y)/(b.y-a.y)+a.x)inside=!inside;
+}return inside;}
+const contains=(unit,x,z)=>unit.polygons.some(rings=>containsRing(rings[0],x,z)&&!rings.slice(1).some(ring=>containsRing(ring,x,z)));
+const np=nestedBatch.geometry.attributes.position.array;
+for(let i=0;i<np.length;i+=9)if(np[i+1]===np[i+4]&&np[i+4]===np[i+7]){
+  const x=(np[i]+np[i+3]+np[i+6])/3,z=(np[i+2]+np[i+5]+np[i+8])/3;
+  assert.ok(contains(units[nestedBatch.owners[i/9]],x,z),'nested band triangle lies within its original footprint and outside source holes');
+}
+const lifted=dsuDisplayInterval(units[1],{layout:'nested',depthStep:25,topOffset:10,bottomOffset:20});
+assert.deepEqual(lifted,{top:60,bottom:170,lift:50,zoneTop:110,zoneBottom:220});
+assert.deepEqual(dsuDisplayInterval(units[1],{layout:'source',depthStep:25}),{top:100,bottom:200,lift:0,zoneTop:100,zoneBottom:200});
+const liftParent=new THREE.Group();liftParent.scale.y=8;
+const liftBatch=buildDSUPrisms([units[1]],{layout:'nested',depthStep:25});
+const liftedVisible=meshFrom(liftBatch,liftParent),liftedPick=meshFrom({geometry:liftBatch.pickGeometry},liftParent);
+liftedVisible.geometry.computeBoundingBox();liftedPick.geometry.computeBoundingBox();
+assert.equal(liftedVisible.geometry.boundingBox.max.y,-50);assert.equal(liftedPick.geometry.boundingBox.max.y,-50);
+const liftedHits=hitAt(liftedPick,.0448,0);assert.ok(liftedHits.length>0);assert.ok(Math.abs(liftedHits[0].point.y-(-50*8))<1e-6);
+assert.equal(sourceShape,JSON.stringify(units.map(unit=>({polygons:unit.polygons,bounds:unit.bounds,zone:unit.properties.zone}))));
+assert.equal(JSON.stringify(fixtures),unchangedFixtures,'display preparation/building never alters source geometry, attributes or original zone');
+
 // Full-data smoke check is optional; synthetic tests below require no data files.
 let realSummary='synthetic fixtures only (no optional local DSU data installed)';
 const optionalData=path.resolve(option('--data')??path.join(viewerPath,'data/dsu/drilling-spacing-units.geojson'));
 let hasData=false;if(!args.includes('--no-data'))try{await fs.access(optionalData);hasData=true;}catch(error){if(option('--data'))throw error;}
 if(hasData){
   const real=JSON.parse(await fs.readFile(optionalData,'utf8'));
+  const originalSources=JSON.stringify(real.features.map(feature=>[feature.geometry,feature.properties.zone]));
   const realUnits=prepareDSUs(real,manifest),realBatch=buildDSUPrisms(realUnits,{mode:'remaining'});
   assert.ok(realUnits.length>0,'optional installed DSU collection is nonempty');
   for(const geometry of [realBatch.geometry,realBatch.edgeGeometry]){
@@ -120,7 +175,15 @@ if(hasData){
   assert.equal(new Set(realBatch.owners).size,realUnits.length);
   assert.ok(realUnits.every(unit=>unit.bounds.every(Number.isFinite)));
   assert.deepEqual(dsuScale(realUnits,'remaining'),[0,16]);
-  realSummary=`${realUnits.length} optional installed units (${realBatch.owners.length} triangles)`;
+  const realNested=buildDSUPrisms(realUnits,{layout:'nested',mode:'acreage',depthStep:250});
+  for(const geometry of [realNested.geometry,realNested.edgeGeometry,realNested.pickGeometry]){
+    for(const attribute of Object.values(geometry.attributes))assert.ok(attribute.array.every(Number.isFinite));
+    geometry.computeBoundingBox();assert.ok([...geometry.boundingBox.min.toArray(),...geometry.boundingBox.max.toArray()].every(Number.isFinite));
+  }
+  assert.equal(realNested.pickOwners.length,realNested.pickGeometry.attributes.position.count/3);
+  assert.equal(new Set(realNested.pickOwners).size,realUnits.length);
+  assert.equal(originalSources,JSON.stringify(real.features.map(feature=>[feature.geometry,feature.properties.zone])));
+  realSummary=`${realUnits.length} optional installed units (${realBatch.owners.length} source triangles; ${realNested.owners.length} nested triangles)`;
 }
 
 // Exercise controller visibility/pick ownership under nonuniform parent depth scale.
@@ -141,15 +204,35 @@ const controllerGroup=root.children.find(child=>child.name==='Approximate DSU zo
 const selectedButton=()=>$('dsuSelection').children.find(child=>child.textContent==='Show only this DSU'||child.textContent==='Show all DSUs');
 assert.ok(selectedButton(),'selected DSU provides an isolation button');
 selectedButton().onclick();assert.equal($('dsuFilter').value,'selected');
-assert.equal(controllerGroup.children.find(child=>child.isMesh).geometry.attributes.position.count,holeBatch.geometry.attributes.position.count);
+assert.equal(controllerGroup.children.find(child=>child.isMesh).geometry.attributes.position.count,buildDSUPrisms([units[0]],{layout:'nested'}).geometry.attributes.position.count);
 assert.ok($('dsuSelection').children.at(-1).textContent.includes('hole'));
 selectedButton().onclick();assert.equal($('dsuFilter').value,'all');
-assert.equal(controllerGroup.children.find(child=>child.isMesh).geometry.attributes.position.count,combined.geometry.attributes.position.count);
+assert.equal(controllerGroup.children.find(child=>child.isMesh).geometry.attributes.position.count,nestedBatch.geometry.attributes.position.count);
 assert.equal(controller.pick(eventAt(0,0),camera,rect),true);assert.match(messages.at(-1),/No DSU box/);
 const oblique=new THREE.PerspectiveCamera(45,1,.1,100000),target=new THREE.Vector3(...projectReference(lon+.007,lat,manifest));target.y=-800;
 oblique.position.copy(target).add(new THREE.Vector3(2000,5000,3000));oblique.lookAt(target);oblique.updateProjectionMatrix();oblique.updateMatrixWorld();
 assert.equal(controller.pick({clientX:500,clientY:500},oblique,rect),true);
 assert.ok($('dsuSelection').children.at(-1).textContent.includes('hole'),'perspective ray retains the same triangle owner under parent scale');
+// The hidden full-source target follows the same exploded display lift and filter as visible bands.
+const partTarget=new THREE.Vector3(...projectReference(lon+.0448,lat,manifest));
+const partCamera=new THREE.OrthographicCamera(-1000,1000,1000,-1000,.1,100000);
+partCamera.position.set(partTarget.x,10000,partTarget.z);partCamera.up.set(0,0,-1);partCamera.lookAt(partTarget.x,-800,partTarget.z);partCamera.updateProjectionMatrix();partCamera.updateMatrixWorld();
+$('dsuDepthSeparation').onchange({target:{value:'25'}});
+assert.equal(controller.pick({clientX:500,clientY:500},partCamera,rect),true);
+assert.ok($('dsuSelection').children.at(-1).textContent.includes('multipart'));
+$('dsuSelection').children.find(child=>child.textContent==='Zoom to DSU').onclick();
+assert.equal(focuses.at(-1)[1],-150);assert.equal(focuses.at(-1)[4],-50,'zoom bounds include the same display lift');
+$('dsuLayout').onchange({target:{value:'source'}});
+assert.equal(controllerGroup.children.filter(child=>child.isMesh).length,1,'source layout uses its visible mesh for picking');
+assert.equal($('dsuDepthSeparation').disabled,true);
+$('dsuSelection').children.find(child=>child.textContent==='Zoom to DSU').onclick();
+assert.equal(focuses.at(-1)[1],-200);assert.equal(focuses.at(-1)[4],-100);
+$('dsuLayout').onchange({target:{value:'nested'}});
+assert.equal(controllerGroup.children.filter(child=>child.isMesh).length,2,'nested layout has a separate hidden full-source target');
+assert.equal(controllerGroup.children.filter(child=>child.isMesh&&child.visible===false).length,1);
+$('dsuFilter').onchange({target:{value:'acres-1280'}});
+controller.pick({clientX:500,clientY:500},partCamera,rect);assert.match(messages.at(-1),/No DSU box/,'filtered hidden pick target cannot capture a click');
+$('dsuFilter').onchange({target:{value:'all'}});
 await controller.setVisible(false);assert.equal(controller.pick(eventAt(.007,0),camera,rect),false);
 assert.equal(controller.inspecting(),false);
 
@@ -176,9 +259,9 @@ const chooser=$('dsuOverlaps').children[1];assert.equal(chooser.children.length,
 chooser.value='1';chooser.onchange();assert.ok($('dsuSelection').children.at(-1).textContent.includes('overlap'));
 const overlapGroup=overlapRoot.children.find(child=>child.name==='Approximate DSU zones');
 selectedButton().onclick();assert.equal($('dsuFilter').value,'selected');
-assert.equal(overlapGroup.children.find(child=>child.isMesh).geometry.attributes.position.count,holeBatch.geometry.attributes.position.count);
+assert.equal(overlapGroup.children.find(child=>child.isMesh).geometry.attributes.position.count,buildDSUPrisms([units[0]],{layout:'nested'}).geometry.attributes.position.count);
 overlapController.setDataset(null);assert.equal($('dsuFilter').value,'all');assert.equal(overlapGroup.children.length,0);
-console.log(`PASS: DSU holes/multipart/concavity, triangle owners, orthographic/perspective picks, depth offsets/root scaling, zero vs missing/review, overlap selection/isolation, visibility and stale dataset replacement; ${realSummary}.`);
+console.log(`PASS: DSU holes/multipart/concavity, nested bands/fallback/source preservation, acreage colors, lifted source picking, triangle owners, depth offsets/root scaling, zero vs missing/review, overlap selection/isolation, visibility and stale dataset replacement; ${realSummary}.`);
 }finally{
   // Validate the resolved temporary target before recursive cleanup on Windows.
   const resolved=await fs.realpath(temporary);

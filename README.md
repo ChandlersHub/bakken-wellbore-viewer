@@ -105,9 +105,9 @@ records, zoom to it, or show only that DSU. Turn inspection off to select wells.
 Upper/lower offsets shift the estimated boundaries in feet. The normal depth-scale
 slider exaggerates wells and DSU boxes together without changing physical TVD.
 
-The local October 17, 2026 snapshot contains 10,573 source records. The default
-yellow-to-red scale uses published spacing acres (colors cap at the 98th percentile;
-the inspector shows actual acres). Spacing/drilling type is also available.
+The local October 17, 2026 snapshot contains 10,573 source records. Fixed acreage colors follow Bakken Forward: 1,280 green, 1,920 blue, 2,560 orange,
+3,840 purple, 640 teal and 5,120 pink. Other sizes are gray. A continuous acreage
+scale and spacing/drilling type remain available.
 Optional saved Bakken Forward colors use a **September 12, 2026 screening model**
 based on September 7 GIS. Only 759 current records have eligible exact matches;
 413 matches require review and 9,401 records are unmatched. Gray means unavailable,
@@ -153,3 +153,33 @@ the raw importer does not invent those estimates.
 
 Source: [ND DMR public GIS downloads](https://gis.dmr.nd.gov/gisdownload.asp).
 Geology context: [NDGS Three Forks](https://www.dmr.nd.gov/dmr/ndgs/three-forks).
+
+### Nested overlap display
+
+The default **Nested outlines** view keeps centers open and uses Bakken Forward's
+fixed inward display offsets: 640 acres = 0 ft, 1,280 = 100 ft, 1,920 = 220 ft,
+2,560 = 340 ft, 3,840 = 460 ft, 5,120 = 580 ft. Intermediate sizes interpolate;
+larger units use a logarithmic extension. Fifty-foot perimeter bands are computed
+with mitred negative buffers in EPSG:5070, then returned to NAD83. They are display
+symbols, not setbacks or lease-line corridors. Source polygons, published acres,
+inventory estimates and original depth intervals remain unchanged. Offsets depend
+on nominal acreage, so filtering does not move them. If any component is too narrow
+for a band, the entire record falls back to its original unfilled outline.
+
+**Optional depth separation** starts off. It provides an exploded view by lifting
+larger acreage classes above smaller ones, at the chosen feet per level; the
+inspector reports each display lift separately. Well paths and estimated zone
+depths do not change. **Source footprint boxes** restores the original boundaries
+and disables the display lift. Selection uses full source footprints with the
+same display lift and still exposes overlapping records independently.
+
+To regenerate the display geometry, install optional Shapely and pyproj, then:
+
+```sh
+python prepare_dsu_display.py local-data/dsus-with-zones.geojson viewer/data/dsu/drilling-spacing-units.geojson
+```
+
+The helper preserves all source geometry/properties and adds separate display
+geometry, provenance, containment checks and an audit. It requires NAD83 input.
+The current local snapshot has 10,572 nested-band records and one original-outline
+fallback. Generated geometry remains local.
