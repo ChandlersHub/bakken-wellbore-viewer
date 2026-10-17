@@ -33,8 +33,8 @@ export function createShowcase(api){
       if(!s.reference.bounds)throw Error('North Dakota boundary unavailable.');
       const response=await fetch('../full-dataset/overview.bin');if(!response.ok)throw Error('Statewide paths unavailable.');
       const raw=new Float32Array(await response.arrayBuffer());if(raw.length!==fullManifest.overviewSegments*8)throw Error('Incomplete statewide paths.');
-      const selected=new Set(s.manifest.wells.map(w=>w.sourceBranchId));let count=0;for(let i=0;i<raw.length;i+=8)if(!selected.has(raw[i+7]))count++;
-      const vertices=new Float32Array(count*6);let p=0;for(let i=0;i<raw.length;i+=8)if(!selected.has(raw[i+7])){vertices.set(raw.subarray(i,i+6),p);p+=6}
+      const identity=w=>`${w.permit}|${w.api}|${w.branch}`,selected=new Set(s.manifest.wells.map(identity)),include=fullManifest.wells.map(w=>!selected.has(identity(w)));let count=0;for(let i=0;i<raw.length;i+=8)if(include[raw[i+7]])count++;
+      const vertices=new Float32Array(count*6);let p=0;for(let i=0;i<raw.length;i+=8)if(include[raw[i+7]]){vertices.set(raw.subarray(i,i+6),p);p+=6}
       context=new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(vertices,3)),new THREE.LineBasicMaterial({color:'#63b8cb',transparent:true,opacity:.8,depthWrite:false}));context.name='Unpickable statewide tour context';s.scene.add(context);
       const cities=await json('./data/reference/places.geojson');places=cities.features.map(f=>({name:f.properties.BASENAME||f.properties.NAME,point:new THREE.Vector3(...projectReference(...f.geometry.coordinates,s.manifest))}));
       // Preload every advertised numeric mode before the recording starts.
@@ -122,7 +122,7 @@ export function createShowcase(api){
     if(elapsed<10)drawMapLabels();
     text(shot.tag,x,216,20,'#86e3d7',600);text(shot.title,x,278,shot.key==='departure'?35:42,'#f2f8fc',500);paragraph(shot.note,x,340);
     if(['state','zoom'].includes(shot.key)){
-      text(fullManifest.wells.length.toLocaleString(),x,573,65,'#86e3d7',600);text('survey branches',x,617,27,'#b7cddb');text('5.36 million',x,722,50,'#e7f1f8',500);text('survey stations',x,767,27,'#b7cddb');paragraph('Statewide overview → 31 wells / 65 branches in the featured cluster.',x,876,450,23,'#8fabbf',33);
+      text(fullManifest.wells.length.toLocaleString(),x,573,65,'#86e3d7',600);text('survey branches',x,617,27,'#b7cddb');text((fullManifest.stations/1e6).toFixed(2)+' million',x,722,50,'#e7f1f8',500);text('survey stations',x,767,27,'#b7cddb');paragraph('Statewide overview → 31 wells / 65 branches in the featured cluster.',x,876,450,23,'#8fabbf',33);
     }else if(METRICS[shot.key]&&shot.key!=='section'){
       const spec=METRICS[shot.key];ramp(spec.cyclic?'cyclic':spec.signed?'signed':'thermal',x,515);
       if(spec.cyclic){['N','E','S','W','N'].forEach((v,i)=>text(v,x+i*108,567,23));paragraph('Bearings below 5° inclination are unavailable.',x,680,450,24);paragraph('The source azimuth reference is retained.',x,856,450,22,'#829fb2',32)}else{

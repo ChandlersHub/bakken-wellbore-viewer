@@ -78,8 +78,8 @@ export function createProductionController(){
     if(!model)return;month=Math.max(period.start,Math.min(period.end,Number(value)||0));
     model.uploadMonth(month,texture.image.data);texture.needsUpdate=true;
     const date=model.metadata.months[month],s=model.summaries[month];$('productionMonth').value=String(month);$('productionMonth').setAttribute('aria-valuetext',monthLabel(date));$('productionDate').value=date;$('productionDateLabel').textContent=monthLabel(date);
-    $('productionSummary').textContent=s.reported?`${fmt(s.barrels)} bbl · ${fmt(s.producing)} producing wells`:'No reported values for this month';
-    $('productionCoverage').textContent=`${fmt(s.reported)} of ${fmt(model.scopeIndices.length)} matched wells reported. Totals count each well once.`;
+    $('productionSummary').textContent=s.reported?`${fmt(s.barrels)} bbl · ${fmt(s.producing)} producing well${s.producing===1?'':'s'}`:'No reported values for this month';
+    $('productionCoverage').textContent=`${fmt(s.reported)} of ${fmt(model.scopeIndices.length)} matched well${model.scopeIndices.length===1?'':'s'} reported. Totals count each well once.`;
     $('productionPrevious').disabled=month===period.start;$('productionNext').disabled=month===period.end;
     selection(selected);
   }
@@ -101,7 +101,7 @@ export function createProductionController(){
       texture=new THREE.DataTexture(new Float32Array(width*height).fill(-1),width,height,THREE.RedFormat,THREE.FloatType);texture.needsUpdate=true;texture.minFilter=texture.magFilter=THREE.NearestFilter;
       uniforms.oilTexture.value=texture;uniforms.textureSize.value.set(width,height);
       $('productionEnabled').disabled=false;$('productionDetails').hidden=false;
-      $('productionStatus').textContent=`${monthLabel(raw.months[0])}–${monthLabel(raw.months.at(-1))} · ${fmt(next.scopeIndices.length)} matched wells`;
+      $('productionStatus').textContent=`${monthLabel(raw.months[0])}–${monthLabel(raw.months.at(-1))} · ${fmt(next.scopeIndices.length)} matched well${next.scopeIndices.length===1?'':'s'}`;
       $('productionSourceNote').textContent=raw.displayNote||'Monthly oil barrels summed across distinct reported pools. Survey geometry is shown at every month; missing records do not establish a drilling date.';
       periods=playbackPeriods(raw.months);$('productionPeriod').replaceChildren();periods.forEach((p,i)=>{const option=document.createElement('option');option.value=i;option.textContent=p.label;$('productionPeriod').append(option)});
       setPeriod(periods.length-1);setEnabled(true);drawLegend();
@@ -139,6 +139,7 @@ export function createProductionController(){
   $('productionSize').oninput=e=>{uniforms.referenceWidth.value=+e.target.value;drawLegend()};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
   return {load,reset,decorate,syncLine,selection,setSurveyColoring:active=>{uniforms.surveyColorEnabled.value=active?1:0},ready:()=>!!model,
+    setBranchScope(ids=null){if(!model)return;model.setBranchScope(ids);const raw=model.metadata;$('productionStatus').textContent=`${monthLabel(raw.months[0])}–${monthLabel(raw.months.at(-1))} · ${fmt(model.scopeIndices.length)} matched well${model.scopeIndices.length===1?'':'s'}${ids===null?'':' in operator filter'}`;setMonth(month)},
     update(t,camera,width,height){uniforms.viewport.value.set(Math.max(1,width),Math.max(1,height));uniforms.cameraNear.value=camera.near;if(!playing)return;if(!lastTick){lastTick=t;return}if(t-lastTick>=1000/Number($('productionSpeed').value)){lastTick=t;if(month>=period.end)stop();else setMonth(month+1)}},
     pickPixels(w){if(!enabled||!model)return 5;const oil=w?model.value(month,model.indexOf(w)):model.summaries[month].maximumOil;return Math.max(5,symbolWidth(oil,uniforms.referenceWidth.value)/2+3)}
   };

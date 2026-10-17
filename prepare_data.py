@@ -17,9 +17,12 @@ def main():
     p.add_argument('input',type=Path); p.add_argument('output',type=Path)
     p.add_argument('--tvd-sign',choices=['positive','negative'],required=True)
     p.add_argument('--source-crs',choices=['NAD83','WGS84'],default='NAD83')
+    p.add_argument('--origin',nargs=2,type=float,metavar=('LONGITUDE','LATITUDE'),help='Fixed tangent-plane origin in source geographic datum; retain when refreshing an existing dataset.')
     p.add_argument('--preserve-sections',action='store_true',help='Preserve supplied section labels instead of applying the new classifier.')
     p.add_argument('--classifier-config',type=Path,help='Optional JSON threshold overrides; see classifier.py Settings.')
     args=p.parse_args(); out=args.output
+    if args.origin and not (-180<=args.origin[0]<=180 and -89<=args.origin[1]<=89):
+        p.error('--origin requires longitude [-180,180] and latitude [-89,89].')
     cfg=Settings(**(json.loads(args.classifier_config.read_text()) if args.classifier_config else {}))
     out.mkdir(parents=True,exist_ok=True)
     if (out/'manifest.json').exists(): raise SystemExit('Output already contains a dataset. Choose a new directory.')
@@ -51,6 +54,7 @@ def main():
         db.execute('CREATE INDEX ord ON s(permit,api,branch,md)')
         lon0,lat0=db.execute('SELECT AVG(lon),AVG(lat) FROM s').fetchone()
         if lon0 is None:raise ValueError('No valid survey stations. Check TVD sign and input.')
+        if args.origin: lon0,lat0=args.origin
         # Ellipsoidal ECEF projected onto the tangent east/north plane at the dataset center.
         # Original geographic datum is retained; Z is relative TVD, not ellipsoidal height.
         a=6378137.;f=1/(298.257222101 if args.source_crs=='NAD83' else 298.257223563);e2=f*(2-f)

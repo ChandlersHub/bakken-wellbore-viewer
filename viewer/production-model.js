@@ -16,12 +16,14 @@ export function createProductionModel(metadata,values,surveyWells){
   if(index.size!==count)throw Error('Duplicate production well identifiers');
   const byBranch=new Int32Array(surveyWells.length).fill(-1),renderByBranch=new Int32Array(surveyWells.length).fill(-1),scope=new Set(),missingIndex=new Map();
   for(const w of surveyWells){const key=productionKey(w),i=index.get(key);if(i!==undefined){byBranch[w.id]=renderByBranch[w.id]=i;scope.add(i)}else{if(!missingIndex.has(key))missingIndex.set(key,-2-missingIndex.size);renderByBranch[w.id]=missingIndex.get(key)}}
-  const scopeIndices=[...scope];
-  const summaries=metadata.months.map((month,m)=>{let barrels=0,reported=0,producing=0,maximumOil=0;for(const i of scopeIndices){const v=values[m*count+i];if(Number.isFinite(v)&&v>=0){barrels+=v;reported++;maximumOil=Math.max(maximumOil,v);if(v>0)producing++}}return{month,barrels,reported,producing,maximumOil}});
+  const allScopeIndices=[...scope],scopeIndices=[...scope],summaries=[];
+  function summarize(){summaries.length=0;for(let m=0;m<metadata.months.length;m++){let barrels=0,reported=0,producing=0,maximumOil=0;for(const i of scopeIndices){const v=values[m*count+i];if(Number.isFinite(v)&&v>=0){barrels+=v;reported++;maximumOil=Math.max(maximumOil,v);if(v>0)producing++}}summaries.push({month:metadata.months[m],barrels,reported,producing,maximumOil})}}
+  summarize();
   return {metadata,values,count,byBranch,renderByBranch,scopeIndices,summaries,
     value(month,index){return index<0?NaN:values[month*count+index]},
     indexOf(w){return w?byBranch[w.id]??-1:-1},
     renderIndexOf(w){return w?renderByBranch[w.id]??-1:-1},
+    setBranchScope(ids=null){const next=ids===null?allScopeIndices:[...new Set(ids.map(id=>byBranch[id]).filter(i=>i>=0))];scopeIndices.length=0;scopeIndices.push(...next);summarize()},
     uploadMonth(month,target){target.fill(-1);for(let i=0;i<count;i++){const v=values[month*count+i];if(Number.isFinite(v)&&v>=0)target[i]=v}return target}
   };
 }

@@ -10,6 +10,7 @@ export function createShowcase(api){
   const candidates=['video/mp4;codecs=avc1.420028','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8'];
   const mime=candidates.find(s=>typeof MediaRecorder!=='undefined'&&MediaRecorder.isTypeSupported(s));
   let preparing=false,ready=false,recording=false,start=0,elapsed=0,phase=-1,recorder=null,parts=[],url=null,baseDistance=1,baseAngle=0,target=null,stats=null,lastMonth=-1,finished=false,frames=0,monthStart=192,monthEnd=299;
+  let fullCounts={branches:47802,stations:5360341};
   const text=(str,x,y,size=24,color='#e4edf5',weight=400)=>{ctx.fillStyle=color;ctx.font=`${weight} ${size}px "Segoe UI",Arial,sans-serif`;ctx.fillText(str,x,y)};
   function paragraph(str,x,y,width,size=26,color='#9db5c8',line=38){ctx.font=`${size}px "Segoe UI",Arial,sans-serif`;let row='';for(const word of str.split(' ')){const next=row?row+' '+word:word;if(ctx.measureText(next).width>width&&row){text(row,x,y,size,color);y+=line;row=word}else row=next}if(row)text(row,x,y,size,color);return y+line;}
   const setEnabled=value=>{$('productionEnabled').checked=value;$('productionEnabled').onchange({target:{checked:value}})};
@@ -17,7 +18,7 @@ export function createShowcase(api){
   async function prepare(){
     preparing=true;const s=api.state();
     try{
-      stats=await api.read('section-metric-scales.json',true);const oil=await api.read('production.json',true);monthStart=oil.months.indexOf('2016-01');monthEnd=oil.months.indexOf('2024-12');if(monthStart<0||monthEnd<monthStart)throw Error('Production coverage for 2016–2024 is required.');await s.surveyColors.setMode('dls');await s.surveyColors.setMode('azimuth');
+      stats=await api.read('section-metric-scales.json',true);try{const response=await fetch('../full-dataset/manifest.json');if(response.ok){const full=await response.json();fullCounts={branches:full.wells.length,stations:full.stations}}}catch{}const oil=await api.read('production.json',true);monthStart=oil.months.indexOf('2016-01');monthEnd=oil.months.indexOf('2024-12');if(monthStart<0||monthEnd<monthStart)throw Error('Production coverage for 2016–2024 is required.');await s.surveyColors.setMode('dls');await s.surveyColors.setMode('azimuth');
       setEnabled(false);api.clearSelection();api.hideReference();s.controls.enabled=false;s.controls.enableDamping=false;s.navigation.reset();
       s.renderer.setPixelRatio(1);s.renderer.setSize(plot.w,plot.h,false);s.camera.aspect=plot.w/plot.h;s.camera.updateProjectionMatrix();api.fit();
       target=s.controls.target.clone();const offset=s.camera.position.clone().sub(target);baseDistance=offset.length()*.81;baseAngle=Math.atan2(offset.x,offset.z);
@@ -62,7 +63,7 @@ export function createShowcase(api){
       paragraph('Display symbols, not bore diameters. Survey geometry is fixed through time.',x,902,width,20,'#809eaf',28);
     }else{
       paragraph('Explore direction, wellbore shape and production in an interactive 3D view.',x,344,width,29,'#c3d7e4',43);
-      text('47,802',x,605,68,'#86e3d7',600);text('survey branches in the full database',x,652,23,'#a5bece');text('5.36 million',x,760,52,'#e6f2fa',500);text('survey stations',x,804,24,'#a5bece');
+      text(fullCounts.branches.toLocaleString('en-US'),x,605,68,'#86e3d7',600);text('survey branches in the full database',x,652,23,'#a5bece');text((fullCounts.stations/1e6).toFixed(2)+' million',x,760,52,'#e6f2fa',500);text('survey stations',x,804,24,'#a5bece');
       paragraph('Mouse navigation. Local data. A new way to explore the Bakken.',x,900,width,22,'#a5bece',31);
     }
     text(`ACTUAL VIEWER RENDERING  ·  REPRESENTATIVE CLUSTER: ${api.state().manifest.wells.length} BRANCHES`,45,1032,19,'#7899ae',500);

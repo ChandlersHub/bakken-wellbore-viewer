@@ -10,9 +10,11 @@ import numpy as np
 
 BASE = Path(__file__).resolve().parent
 WORK = BASE.parent
-LAS = Path(os.environ.get('BAKKEN_LAS_DIR', str(WORK / 'local-data' / 'las')))
+SETTINGS_PATH = WORK / 'local-settings.json'
+LOCAL_SETTINGS = json.loads(SETTINGS_PATH.read_text(encoding='utf8')) if SETTINGS_PATH.exists() else {}
+LAS = Path(os.environ.get('BAKKEN_LAS_DIR', LOCAL_SETTINGS.get('lasDir', str(WORK / 'local-data' / 'las'))))
 MANIFEST = Path(os.environ.get('BAKKEN_MANIFEST', str(WORK / 'full-dataset' / 'manifest.json')))
-DBF = Path(os.environ.get('BAKKEN_SURVEY_DBF', str(WORK / 'local-data' / 'OGD_Horizontals.dbf')))
+DBF = Path(os.environ.get('BAKKEN_SURVEY_DBF', LOCAL_SETTINGS.get('surveyDbf', str(WORK / 'local-data' / 'OGD_Horizontals.dbf'))))
 if not DBF.exists(): DBF = LAS / 'OGD_Horizontals' / 'OGD_Horizontals.dbf'
 REFERENCE = 'Relative TVD in feet; original logged MD matched to observed survey MD; no elevation or datum correction applied'
 

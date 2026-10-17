@@ -21,3 +21,5 @@ gamma-data/*cache*/
 *.zip
 
 local-data/
+local-settings.json
+work/

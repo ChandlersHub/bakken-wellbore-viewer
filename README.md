@@ -9,6 +9,7 @@ A local interactive 3D viewer for public North Dakota well surveys and productio
 - Well-section classification, including candidates for sustained sideways deviation in the upper well.
 - Azimuth, inclination, DLS, curvature, local tortuosity, signed build/turn rates, TVD, measured depth and horizontal departure.
 - Independent color ranges by well section, with custom limits.
+- Operator colors, a searchable operator identity, an operator filter, and a fit-to-filter button. Production totals follow the operator filter.
 - Monthly oil playback with lateral display width proportional to the square root of monthly barrels.
 - Gamma-ray and conventional CBL amplitude overlays on observed vertical survey branches.
 - Local canvas recording studios for the cluster showcase and statewide tour.
@@ -49,6 +50,8 @@ Then open `http://127.0.0.1:65119/viewer/?dataset=full`. Prepared data is still 
 
 ## Preparing survey data
 
+The local data was refreshed from the [ND DMR GIS downloads](https://gis.dmr.nd.gov/gisdownload.asp) dated October 17, 2026. The refreshed local survey contains 48,929 branches, 22,498 permit/API10 wells and 5,495,609 retained stations. Download `OGD_Wells.zip` for reported operators and `OGD_Horizontals.zip` for station geometry. Prepared data remains local.
+
 ```sh
 python prepare_data.py INPUT.dbf full-dataset --tvd-sign positive --source-crs NAD83
 python prepare_metrics.py INPUT.dbf full-dataset full-dataset
@@ -56,6 +59,27 @@ python prepare_section_scales.py full-dataset full-dataset
 ```
 
 Choose the TVD sign and CRS to match the input. The first command requires a new output folder. `prepare_production.py --help` describes the production import arguments. Original input files are not modified.
+
+For an existing installation, `prepare_data.py --origin LONGITUDE LATITUDE` preserves its tangent-plane origin when rebuilding geometry. Quote full-precision coordinate strings in PowerShell. Keep all metric, production and log indexes aligned with the new manifest; the local log server must restart after its survey index changes.
+
+Add operator metadata after preparing a survey dataset:
+
+```sh
+python prepare_operators.py OGD_Wells.dbf full-dataset --source-date 2026-10-17
+```
+
+Choose **Operator** under **Color wellbores by**, then optionally filter a display group and select **Fit displayed operators**. The palette follows the supplied operator legend: Hess/Chevron is green and XTO is amber. Chord/Enerplus/Oasis/Whiting and other combined legend entries are display groups. Selecting a well shows its exact reported DMR operator name. These aliases do not assert legal ownership or reconstruct the operator in a historical production month. Unlisted operators remain individually named with stable colors; unavailable identities are gray. Joins use permit plus API10; mismatches and ambiguous identities are not guessed.
+
+To share an operator-view URL on your local instance, use `/viewer/?dataset=full&color=operator`.
+
+## Operator validation
+
+```sh
+python -m unittest discover -s tests -v
+node tests/operator-colors.mjs
+```
+
+The checks cover strict DBF joins, ambiguous/mismatched identities, palette groups, invalid metadata, per-segment and selected-branch coloring, production ribbon color sharing, operator-filter production totals, and switching datasets without retaining old operator mappings.
 
 ## Interpretation
 

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import {createOperatorModel} from './operator-model.js';
 
 export const METRICS={
   section:{label:'Well section'},
+  operator:{label:'Operator',categorical:true},
   dls:{label:'Dogleg severity (DLS)',field:3,unit:'°/100 ft',min:0,max:15,note:'Change in survey direction per 100 ft of measured depth. Overview colors retain the largest interval DLS within each displayed segment.'},
   curvature:{label:'Curvature',field:3,factor:Math.PI/18,unit:'rad/1,000 ft',min:0,max:Math.PI*5/6,note:'Survey-course curvature. This is DLS expressed in radians per 1,000 ft, so the two modes describe the same directional change.'},
   tortuosity:{label:'Local tortuosity',field:6,unit:'path/chord ratio',min:1,max:1.15,note:'3D path length ÷ straight-line distance in a centered 1,000 ft MD window. Straight = 1. Planned curves also increase this ratio. End windows shorten; at least 500 ft and three distinct points are required. Overview retains the highest ratio.'},
@@ -25,7 +27,7 @@ export function scaleRGB(t,palette='viridis'){
   const colors=palettes[palette]||palettes.viridis,x=t*(colors.length-1),i=Math.min(colors.length-2,Math.floor(x)),f=x-i,a=srgb(colors[i]),b=srgb(colors[i+1]);return a.map((v,k)=>v+(b[k]-v)*f);
 }
 export function metricValue(mode,data,index,geometry){
-  const spec=METRICS[mode];if(!spec||mode==='section')return NaN;
+  const spec=METRICS[mode];if(!spec||mode==='section'||spec.categorical)return NaN;
   if(mode==='tvd')return geometry?Math.abs(geometry[index*4+1]):NaN;
   const v=data?.[index*8+spec.field];return Number.isFinite(v)?v*(spec.factor||1):NaN;
 }
@@ -34,7 +36,7 @@ const $=id=>document.getElementById(id);
 const SECTION_NAMES=['Vertical','Directional','Curve','Drillback','Lateral','Unknown'];
 export function automaticSectionBounds(mode,stats){
   const s=METRICS[mode],factor=s.factor||1;
-  if(!stats?.count)return null;
+  if(s.categorical||!stats?.count)return null;
   if(s.cyclic)return [0,360];
   if(s.signed){const limit=Math.max(stats.absP98*factor,0.001);return [-limit,limit]}
   let low=stats.p02*factor,high=stats.p98*factor;
@@ -46,6 +48,7 @@ export function automaticSectionBounds(mode,stats){
 export function createSurveyColors({changed}={}){
   let mode='section',metadata=null,manifest=null,reader=null,overview=null,generation=0,selected=null,selectedData=null,overviewPromise=null;
   const tiles=new Map(),pending=new Map(),limits=new Map(),views=new Set();let ramp=[],palette='thermal';
+  let operators=null,operatorRGB=[];
   let sectionStats=null,scope='shared',editSection=4,modeRequest=0,activeRanges=[];const sectionLimits=new Map();
   const sectionRGB=SECTION.map(h=>srgb(h).map(linear)),unknown=srgb('#80909d').map(linear);
   const spec=()=>METRICS[mode];
@@ -55,11 +58,12 @@ export function createSurveyColors({changed}={}){
     if(bySection())return sectionLimits.get(mode+':'+section)||automaticSectionBounds(mode,statsFor(section));
     const s=spec(),max=limits.get(mode)??s.max;return[s.signed?-max:s.min,max];
   }
-  function makeRamp(){const s=spec(),key=s.cyclic?'cyclic':s.signed?'signed':palette;ramp=Array.from({length:1025},(_,i)=>scaleRGB(i/1024,key).map(linear));activeRanges=SECTION_NAMES.map((_,i)=>bounds(i));}
-  function rgb(value,section){if(mode==='section')return sectionRGB[section]||unknown;if(!Number.isFinite(value))return unknown;const range=activeRanges[section];if(!range)return unknown;const [lo,hi]=range,t=spec().cyclic?((value%360)+360)%360/360:Math.max(0,Math.min(1,(value-lo)/(hi-lo)));return ramp[Math.round(t*1024)]}
+  function makeRamp(){const s=spec();if(s.categorical){ramp=[];activeRanges=[];return}const key=s.cyclic?'cyclic':s.signed?'signed':palette;ramp=Array.from({length:1025},(_,i)=>scaleRGB(i/1024,key).map(linear));activeRanges=SECTION_NAMES.map((_,i)=>bounds(i));}
+  function rgb(value,section,branchId=null){if(mode==='section')return sectionRGB[section]||unknown;if(mode==='operator')return operatorRGB[operators?.forBranch(branchId)?.id]||unknown;if(!Number.isFinite(value))return unknown;const range=activeRanges[section];if(!range)return unknown;const [lo,hi]=range,t=spec().cyclic?((value%360)+360)%360/360:Math.max(0,Math.min(1,(value-lo)/(hi-lo)));return ramp[Math.round(t*1024)]}
   function legend(){
-    const s=spec();$('surveyColorMode').value=mode;$('surveyColorDetails').hidden=mode==='section';$('surveyColorNote').textContent=s.note||'';
-    if(mode==='section')return;
+    const s=spec();$('surveyColorMode').value=mode;$('surveyColorDetails').hidden=mode==='section'||!!s.categorical;$('surveyColorNote').textContent=s.note||'';
+    $('operatorControls').hidden=!operators||(mode!=='operator'&&$('operatorFilter').value==='all');
+    if(mode==='section'||s.categorical)return;
     const range=bounds(),[lo,hi]=range||[NaN,NaN],key=s.cyclic?'cyclic':s.signed?'signed':palette;
     $('surveyColorPalette').value=palette;
     $('surveyScaleScope').value=scope;$('surveyScaleScope').disabled=!sectionStats||!!s.cyclic;
@@ -92,19 +96,20 @@ export function createSurveyColors({changed}={}){
       const value=mode==='tvd'?Math.abs(p[i*6+4]):metricValue(mode,data,binding.rows[i]);
       // Overview positions may have been collapsed by detail loading; retain original TVD.
       const actual=mode==='tvd'&&line.userData.original?Math.abs(line.userData.original[i*6+4]):value;
-      const c=rgb(actual,line.userData.section);for(let k=0;k<6;k++)attr.array[i*6+k]=c[k%3];
+      const c=rgb(actual,line.userData.section,line.userData.ids?.[i]);for(let k=0;k<6;k++)attr.array[i*6+k]=c[k%3];
     }
     attr.needsUpdate=true;line.userData.production?.colors&&(line.userData.production.colors.needsUpdate=true);
   }
   function refresh(){makeRamp();for(const line of views)apply(line);legend();selection(selected,selectedData);changed?.(mode)}
-  function reset(){generation++;metadata=null;manifest=null;reader=null;overview=null;overviewPromise=null;tiles.clear();pending.clear();selected=null;selectedData=null;mode='section';limits.clear();sectionLimits.clear();sectionStats=null;scope='shared';$('surveyColorMode').disabled=true;$('surveyColorStatus').textContent='Reading survey measurements…';legend()}
+  function reset(){generation++;metadata=null;manifest=null;reader=null;overview=null;overviewPromise=null;operators=null;operatorRGB=[];$('operatorFilter').value='all';tiles.clear();pending.clear();selected=null;selectedData=null;mode='section';limits.clear();sectionLimits.clear();sectionStats=null;scope='shared';$('surveyColorMode').disabled=true;$('surveyColorStatus').textContent='Reading survey measurements…';legend()}
   async function load(read,survey){
     reset();manifest=survey;reader=read;const version=generation;
     try{const m=await read('metrics.json',true);if(version!==generation)return;if(m.version!==1||m.stride!==8||m.stations!==survey.stations||m.overviewSegments!==survey.overviewSegments||m.branchCount!==survey.wells.length||m.source?.sourceCRS!==survey.sourceCRS||JSON.stringify(m.source?.origin)!==JSON.stringify(survey.origin))throw Error('Measurement index does not match the survey.');metadata=m;$('surveyColorStatus').textContent='Survey measurements available · shared scales across wells';}
     catch(e){if(version===generation)$('surveyColorStatus').textContent='Survey measurements unavailable. Section and TVD colors remain available.'}
     if(version!==generation)return;
     try{const stats=await read('section-metric-scales.json',true);if(version!==generation)return;if(stats.version===1&&stats.stations===survey.stations&&stats.branchCount===survey.wells.length&&stats.overviewSegments===survey.overviewSegments&&stats.sourceCRS===survey.sourceCRS&&JSON.stringify(stats.origin)===JSON.stringify(survey.origin)&&Array.isArray(stats.sections)){sectionStats=stats;scope='section'}}catch(e){if(version!==generation)return;}
-    for(const option of $('surveyColorMode').options)option.disabled=!metadata&&!['section','tvd'].includes(option.value);
+    try{const raw=await read('operators.json',true);if(version!==generation)return;operators=createOperatorModel(raw,survey);operatorRGB=operators.groups.map(g=>srgb(g.color).map(linear));$('operatorStatus').textContent=`DMR wells snapshot ${operators.provenance.sourceDate||''} · operator joined by permit and API`;}catch(e){if(version!==generation)return;$('operatorStatus').textContent='Operator metadata unavailable for this dataset.';}
+    for(const option of $('surveyColorMode').options)option.disabled=option.value==='operator'?!operators:!metadata&&!['section','tvd'].includes(option.value);
     if(version===generation)$('surveyColorMode').disabled=false;
   }
   async function ensureOverview(){
@@ -120,8 +125,9 @@ export function createSurveyColors({changed}={}){
     try{return await task}finally{if(version===generation)pending.delete(tile)}
   }
   async function setMode(next){
-    if(!METRICS[next]||(!metadata&&!['section','tvd'].includes(next)))return;mode=next;const version=generation,request=++modeRequest;refresh();
-    if(mode==='section'||mode==='tvd')return;
+    if(!METRICS[next]||(next==='operator'?!operators:!metadata&&!['section','tvd'].includes(next)))return;mode=next;const version=generation,request=++modeRequest;refresh();
+    if(mode==='operator'){$('surveyColorStatus').textContent=`Operator colors · DMR snapshot ${operators.provenance.sourceDate||''}`;return}
+    if(mode==='section'||mode==='tvd'){$('surveyColorStatus').textContent=metadata?'Survey measurements available · shared scales across wells':'Survey measurements unavailable. Section and TVD colors remain available.';return}
     $('surveyColorStatus').textContent='Loading full-resolution measurements…';
     const needed=[...new Set([...views].map(l=>l.userData.surveyColor.tile).filter(Boolean))],results=await Promise.allSettled([ensureOverview(),...needed.map(ensureTile)]);
     if(version!==generation||request!==modeRequest)return;refresh();const failed=results.filter(r=>r.status==='rejected');$('surveyColorStatus').textContent=failed.length?'Some measurements unavailable; loaded measurements are shown.':'Full-resolution metrics · overview preserves rate peaks';
@@ -131,10 +137,11 @@ export function createSurveyColors({changed}={}){
     line.geometry.setAttribute('color',new THREE.BufferAttribute(new Float32Array(rows.length*6),3));line.material.vertexColors=true;line.material.color.set(0xffffff);line.material.needsUpdate=true;
     views.add(line);line.geometry.addEventListener('dispose',()=>views.delete(line));apply(line);
   }
-  function stationRGB(section,tile,row,data){return rgb(metricValue(mode,tiles.get(tile),row,data),section)}
+  function stationRGB(section,tile,row,data,branchId=null){return rgb(metricValue(mode,tiles.get(tile),row,data),section,branchId)}
   function selection(w,data){
     selected=w;selectedData=data;const host=$('wellSurveyMetric');if(!host)return;host.replaceChildren();host.hidden=!w||mode==='section';if(host.hidden)return;
     const h=document.createElement('h4');h.textContent=spec().label+' · selected branch';const p=document.createElement('p');p.className='caption';
+    if(mode==='operator'){const group=operators?.forBranch(w.id);p.textContent=operators?.nameForBranch(w.id)||'Operator unavailable';host.append(h,p);const note=document.createElement('p');note.className='caption';note.textContent='Display group: '+(group?.label||'Unknown');host.append(note);return}
     let min=Infinity,max=-Infinity,n=0;
     for(let i=w.offset;i<w.offset+w.count;i++){const v=metricValue(mode,tiles.get(w.tile),i,data);if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v);n++}}
     p.textContent=n?`${fmt(min,3)}–${fmt(max,3)} ${spec().unit} · ${fmt(n)} valid stations`:'No valid measurements available for this branch.';host.append(h,p);
@@ -151,8 +158,8 @@ export function createSurveyColors({changed}={}){
   $('surveyColorApply').onclick=()=>$('surveyColorCeiling').onchange({target:$('surveyColorCeiling')});
   $('surveyColorReset').onclick=()=>{if(bySection())sectionLimits.delete(mode+':'+editSection);else limits.delete(mode);$('surveyScaleError').textContent='';refresh()};
   makeRamp();legend();
-  return {load,reset,decorate,ensureTile,selection,stationRGB,refresh,setMode,mode:()=>mode,active:()=>mode!=='section',ready:()=>!!metadata,
+  return {load,reset,decorate,ensureTile,selection,stationRGB,refresh,setMode,operatorModel:()=>operators,mode:()=>mode,active:()=>mode!=='section',ready:()=>!!metadata,
     releaseTiles(keep){for(const key of tiles.keys())if(!keep.has(key))tiles.delete(key)},
-    async tileReady(tile){if(mode==='section'||mode==='tvd')return;await ensureTile(tile);for(const l of views)if(l.userData.surveyColor.tile===tile)apply(l);selection(selected,selectedData)}
+    async tileReady(tile){if(mode==='section'||mode==='tvd'||mode==='operator')return;await ensureTile(tile);for(const l of views)if(l.userData.surveyColor.tile===tile)apply(l);selection(selected,selectedData)}
   };
 }
