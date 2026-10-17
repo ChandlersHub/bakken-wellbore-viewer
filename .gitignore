@@ -23,3 +23,5 @@ gamma-data/*cache*/
 local-data/
 local-settings.json
 work/
+
+viewer/data/dsu/

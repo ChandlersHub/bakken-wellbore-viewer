@@ -18,7 +18,7 @@ A local interactive 3D viewer for public North Dakota well surveys and productio
 
 This repository contains application and processing code, the vendored Three.js library with its license, and the geographic reference layer. It does not contain the full survey dataset, production records, LAS files, extracted log catalogs/indexes, caches or videos. Cloning the source alone does not restore the populated viewer.
 
-The current working installation contains 47,802 survey branches and 5,360,341 stations. Those are dataset counts, not files distributed in this repository. Keep the existing local installation and original inputs as the data backup.
+The current working installation contains 48,929 survey branches and 5,495,609 stations. Those are dataset counts, not files distributed in this repository. Keep the existing local installation and original inputs as the data backup.
 
 ## Setup
 
@@ -93,3 +93,63 @@ Production playback retains the current survey geometry through time. Display wi
 - `/viewer/?showcase=tour`: 50-second statewide zoom and feature tour.
 
 Both need the prepared showcase subset. The statewide tour additionally needs the full overview and the configured local GR/CBL sources. Recordings are generated and downloaded locally.
+
+## Drilling spacing units (DSUs)
+
+Enable **Show 3D DSU boxes** to load the local DSU layer. The boxes follow the
+published footprint polygons, including irregular and overlapping units. They
+occupy an **approximate Lodgepole–Three Forks display interval** near the laterals;
+they are not columns from the surface and are not a legal interpretation of orders.
+Use **Inspect DSUs instead of wells** to pick a box, choose among overlapping
+records, zoom to it, or show only that DSU. Turn inspection off to select wells.
+Upper/lower offsets shift the estimated boundaries in feet. The normal depth-scale
+slider exaggerates wells and DSU boxes together without changing physical TVD.
+
+The local October 17, 2026 snapshot contains 10,573 source records. The default
+yellow-to-red scale uses published spacing acres (colors cap at the 98th percentile;
+the inspector shows actual acres). Spacing/drilling type is also available.
+Optional saved Bakken Forward colors use a **September 12, 2026 screening model**
+based on September 7 GIS. Only 759 current records have eligible exact matches;
+413 matches require review and 9,401 records are unmatched. Gray means unavailable,
+never zero. This historical model has not been recalculated for October data.
+Its saved assumptions are 8 wells/1,280 acres, 2-mile laterals, $70 oil, 13 days/well,
+and $8.5 million/well. Development is a modeled percentage; confidence is a score,
+not a probability. No DSU operator ownership is inferred.
+
+Depth placement uses converted TVD picks dated September 7: nearby same-well
+Lodgepole/Birdbear pairs are preferred (up to five within 25 km). Birdbear top is an
+approximate proxy for the Three Forks base. Other units use screened separate
+top medians, Lodgepole +800 ft, or nearest long-lateral TVD −800/+200 ft. A regional
+9,000–10,000 ft fallback exists when no control is available. All depths use the
+existing provisional KB/relative-TVD convention with no reference-elevation
+correction. This is an illustration, not a fitted or verified formation surface.
+The inspector reports the method, control count, distances and date. Formation
+surfaces and exact order-defined limits can replace these estimates later.
+
+Generated DSU data, formation picks and historical model files remain local and
+are ignored by Git. Copy `viewer/data/dsu/` when moving the populated installation.
+To prepare fresh public footprints without GIS dependencies:
+
+```sh
+python prepare_dsu.py OGD_DrillingSpacingUnits.zip local-data/dsus.geojson
+```
+
+For approximate depths, supply the existing resolved converted-TVD picks CSV
+(FileNo, formation_code, tvd_ft, easting_m, northing_m, top_md_ft, status,
+survey_gap_ft and datum/reference fields). Source XY is EPSG:32121 metres;
+`--coordinates source` requires pyproj. `--coordinates manifest` uses matching
+VERT-branch bounding-box centers as approximate locations and records that choice.
+
+```sh
+python prepare_dsu_zone.py --dsus local-data/dsus.geojson --manifest full-dataset/manifest.json --tops local-data/converted-tops.csv --output local-data/dsu-zones.json
+python merge_dsu_zones.py local-data/dsus.geojson local-data/dsu-zones.json viewer/data/dsu/drilling-spacing-units.geojson
+```
+
+Create the output folder before merging. Without formation picks, the viewer
+can load the footprint-only output at that same path and explicitly uses the
+regional approximate interval. The public ZIP has no depths or inventory fields.
+Historical inventory colors require a separately audited exact-identity join;
+the raw importer does not invent those estimates.
+
+Source: [ND DMR public GIS downloads](https://gis.dmr.nd.gov/gisdownload.asp).
+Geology context: [NDGS Three Forks](https://www.dmr.nd.gov/dmr/ndgs/three-forks).
