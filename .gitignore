@@ -29,3 +29,7 @@ viewer/data/inventory/
 
 # Local inventory audit generated from retained model snapshots
 viewer/inventory-review.html
+
+# Precompressed copies written by compress_dataset.py
+*.gz
+*.br

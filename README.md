@@ -41,6 +41,14 @@ python serve.py
 
 It binds to `127.0.0.1` and prints the viewer URL. Add `--no-browser` to suppress opening a tab, or `--port 65119` to request a particular local port.
 
+To cut transfer sizes, write precompressed copies of the prepared data once (and again after any rebuild):
+
+```sh
+python compress_dataset.py full-dataset viewer/data
+```
+
+`serve.py` then sends the `.gz` copy (or `.br` when `pip install brotli` is available) to browsers that accept it; copies older than their originals are ignored. On synthetic test data this roughly halved binary tiles and shrank `manifest.json` by about 80%.
+
 For geometry/production only, without the optional log service, serve this folder with Python's static server:
 
 ```sh
@@ -78,6 +86,7 @@ To share an operator-view URL on your local instance, use `/viewer/?dataset=full
 ```sh
 python -m unittest discover -s tests -v
 node tests/operator-colors.mjs
+node tests/segments.mjs
 ```
 
 The checks cover strict DBF joins, ambiguous/mismatched identities, palette groups, invalid metadata, per-segment and selected-branch coloring, production ribbon color sharing, operator-filter production totals, and switching datasets without retaining old operator mappings.
