@@ -1,12 +1,32 @@
 """Local-only survey viewer with on-demand read-only LAS gamma and cement-bond amplitude extraction."""
 from pathlib import Path
-import argparse, functools, http.server, json, sys, threading, urllib.parse
+import argparse, email.utils, functools, http.server, json, mimetypes, sys, threading, urllib.parse
 
 PACKAGE=Path(__file__).resolve().parent
 sys.path.insert(0,str(PACKAGE/'gamma-data'))
 from gamma_service import GammaStore
 from cbl_service import CBLStore
 from averaging import get_averaged_well
+
+SIDECARS=(('br','.br'),('gzip','.gz'))
+
+def accepted_encodings(header):
+    accepted=set()
+    for part in (header or '').split(','):
+        name,*params=[v.strip() for v in part.split(';')]
+        if any(v.replace(' ','') in ('q=0','q=0.0','q=0.00','q=0.000') for v in params):continue
+        if name:accepted.add(name.lower())
+    return accepted
+
+def encoded_variant(path,accept_header):
+    """Return (sidecar, encoding) for a current precompressed copy the client accepts, else None."""
+    accepted=accepted_encodings(accept_header)
+    if not path.is_file():return None
+    for encoding,suffix in SIDECARS:
+        if encoding not in accepted:continue
+        sidecar=path.with_name(path.name+suffix)
+        if sidecar.is_file() and sidecar.stat().st_mtime_ns>=path.stat().st_mtime_ns:return sidecar,encoding
+    return None
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--no-browser',action='store_true');parser.add_argument('--port',type=int,default=0);parser.add_argument('--log',choices=['gamma','cbl'],default='gamma');args=parser.parse_args()
@@ -19,6 +39,7 @@ def main():
             if args and str(args[1] if len(args)>1 else '').startswith(('4','5')):super().log_message(fmt,*args)
         def end_headers(self):
             self.send_header('Cache-Control','no-cache')
+            self.send_header('Vary','Accept-Encoding')
             self.send_header('X-Content-Type-Options','nosniff')
             super().end_headers()
         def json_response(self,value,status=200):
@@ -53,7 +74,20 @@ def main():
             allowed=any(target.is_relative_to((PACKAGE/name).resolve()) for name in ('viewer','full-dataset'))
             if not allowed:
                 self.send_error(404);return
+            variant=encoded_variant(target,self.headers.get('Accept-Encoding'))
+            if variant:return self.send_encoded(target,*variant)
             return super().do_GET()
+        def send_encoded(self,original,sidecar,encoding):
+            # Precompressed copy written by compress_dataset.py; fetch() decodes it transparently.
+            stat=sidecar.stat();tag=f'"{encoding}-{stat.st_size:x}-{stat.st_mtime_ns:x}"'
+            if self.headers.get('If-None-Match')==tag:
+                self.send_response(304);self.send_header('ETag',tag);self.end_headers();return
+            self.send_response(200)
+            self.send_header('Content-Type',mimetypes.guess_type(original.name)[0] or 'application/octet-stream')
+            self.send_header('Content-Encoding',encoding);self.send_header('Content-Length',str(stat.st_size))
+            self.send_header('ETag',tag);self.send_header('Last-Modified',email.utils.formatdate(stat.st_mtime,usegmt=True))
+            self.end_headers()
+            with sidecar.open('rb') as f:self.copyfile(f,self.wfile)
     server=http.server.ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     url=f'http://127.0.0.1:{server.server_port}/viewer/?dataset=full&gamma=1'+('&log=cbl' if args.log=='cbl' else '')
     print('Well log viewer: '+url,flush=True)
