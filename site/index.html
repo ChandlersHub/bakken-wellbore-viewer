@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bakken Subsurface Analytics · 3D Bakken well research</title>
+<meta name="description" content="Source-backed Bakken area intelligence: 3D well paths, monthly production, DSU and township lateral-footage context from public North Dakota DMR data. Request a 15-minute demo.">
+<meta name="theme-color" content="#071523">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bakken Subsurface Analytics">
+<meta property="og:title" content="Source-backed Bakken area research, in 3D">
+<meta property="og:description" content="3D well paths, production coverage and nearby development context for North Dakota Bakken areas, with explicit limitations.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Source-backed Bakken area research, in 3D">
+<meta name="twitter:description" content="3D well paths, production coverage and nearby development context from public North Dakota DMR data.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Bakken Subsurface Analytics","applicationCategory":"BusinessApplication","operatingSystem":"Web browser","description":"3D Bakken well-path, production and drilling-spacing-unit research from public North Dakota DMR data.","offers":{"@type":"Offer","name":"Free Explorer","price":"0","priceCurrency":"USD"}}</script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#top" aria-label="Bakken Subsurface Analytics home"><span class="mark">B</span><span>BAKKEN <span class="sub">SUBSURFACE ANALYTICS</span></span></a>
+  <nav aria-label="Primary"><a href="#features">Product</a><a href="#pricing">Pricing</a><a href="#limits">Data &amp; limits</a><a class="button primary" href="#request" data-cta="nav-demo" data-interest="demo">Request a demo</a></nav>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="eyebrow">NORTH DAKOTA BAKKEN · PUBLIC DMR DATA</div>
+    <h1>Bakken area research you can show your sources for.</h1>
+    <p class="lede">Produce a source-backed area brief quickly: 3D well paths, production coverage and nearby development context, with every limitation stated up front.</p>
+    <div class="actions"><a class="button primary large" href="#request" data-cta="hero-demo" data-interest="demo">Book a 15-minute demo</a><a class="button large" data-explorer data-cta="hero-explorer" href="../viewer/?showcase=tour">Open the free explorer</a></div>
+    <dl class="snapshot" aria-label="Current data snapshot">
+      <div><dt>Survey branches</dt><dd data-snapshot="branches">48,929</dd></div>
+      <div><dt>Wells (permit / API10)</dt><dd data-snapshot="wells">22,498</dd></div>
+      <div><dt>Survey stations</dt><dd data-snapshot="stations">5.5M</dd></div>
+      <div><dt>DMR snapshot</dt><dd data-snapshot="date">October 17, 2026</dd></div>
+    </dl>
+  </section>
+
+  <section class="audience" aria-labelledby="audienceTitle">
+    <h2 id="audienceTitle">Built for teams that screen Bakken acreage every week</h2>
+    <ul class="cards four">
+      <li><h3>Mineral &amp; royalty buyers</h3><p>Check offset development and production history around an area before you make an offer.</p></li>
+      <li><h3>Independent landmen</h3><p>See which wells cross which spacing units without stitching together permit lookups.</p></li>
+      <li><h3>Consulting engineers</h3><p>Inspect trajectories, dogleg severity and GR / CBL overlays on surveyed branches.</p></li>
+      <li><h3>Oilfield service teams</h3><p>Find where operators are active and how laterals are developing across townships.</p></li>
+    </ul>
+  </section>
+
+  <section id="features" aria-labelledby="featuresTitle">
+    <h2 id="featuresTitle">What you can do today</h2>
+    <ul class="cards three">
+      <li><h3>3D well paths</h3><p>Orbit every surveyed branch in plan, side or 3D, colored by well section, operator, DLS, inclination, TVD and more.</p></li>
+      <li><h3>Monthly oil playback</h3><p>Lateral width follows reported monthly barrels. Reported zeros and missing months stay distinct.</p></li>
+      <li><h3>DSU &amp; township context</h3><p>Published DMR spacing-unit footprints with surveyed wells, combined production and editable lateral-footage scenarios.</p></li>
+      <li><h3>Operator views</h3><p>Filter and fit by operator group, with the exact DMR operator shown for each well.</p></li>
+      <li><h3>Well log overlays</h3><p>Gamma-ray and CBL amplitude drawn along observed vertical branches.</p></li>
+      <li><h3>Share a view</h3><p>Copy a link that reopens the same color mode, inventory scenario and selected DSU for a colleague.</p></li>
+    </ul>
+  </section>
+
+  <section class="pilot" aria-labelledby="pilotTitle">
+    <div>
+      <div class="eyebrow">FOUNDER PILOT</div>
+      <h2 id="pilotTitle">Bring one area you are already evaluating.</h2>
+      <p>We prepare a research brief on that area, walk you through the source-backed findings, and learn whether it removes manual research steps from your workflow. The 60-day paid pilot includes refreshed briefs and direct onboarding.</p>
+    </div>
+    <a class="button primary large" href="#request" data-cta="pilot-apply" data-interest="pilot">Apply for a pilot</a>
+  </section>
+
+  <section id="pricing" aria-labelledby="pricingTitle">
+    <h2 id="pricingTitle">Pricing</h2>
+    <p class="caption">Early-access pricing. Plans and prices may change as we learn from pilot customers.</p>
+    <div id="plans" class="plans"></div>
+    <div class="planned"><h3>Planned plans</h3><p class="caption">Not available yet. Choose “Waitlist for a paid plan” below to hear when they open.</p><ul id="plannedPlans"></ul></div>
+  </section>
+
+  <section id="request" class="request" aria-labelledby="requestTitle">
+    <div class="request-copy">
+      <h2 id="requestTitle">Request a demo or pilot</h2>
+      <p>Tell us a little about the research you do. We reply personally, usually within one business day, to schedule 15 minutes.</p>
+      <p class="caption">We use these details only to reply to you and to understand your workflow. No mailing lists.</p>
+    </div>
+    <form id="requestForm" novalidate>
+      <div class="grid">
+        <label>Name<input id="name" name="name" autocomplete="name" required><span id="nameError" class="error" aria-live="polite"></span></label>
+        <label>Work email<input id="email" name="email" type="email" autocomplete="email" required><span id="emailError" class="error" aria-live="polite"></span></label>
+        <label>Company<input id="company" name="company" autocomplete="organization" required><span id="companyError" class="error" aria-live="polite"></span></label>
+        <label>Your role<select id="role" name="role" required><option value="">Choose…</option><option value="mineral">Mineral / royalty acquisition</option><option value="landman">Independent landman</option><option value="engineer">Consulting engineer</option><option value="service">Oilfield service prospecting</option><option value="operator">Operator</option><option value="other">Other</option></select><span id="roleError" class="error" aria-live="polite"></span></label>
+        <label>Team size<select name="teamSize"><option value="">Choose…</option><option>Just me</option><option>2–5</option><option>6–20</option><option>21–100</option><option>100+</option></select></label>
+        <label>Areas evaluated per month<select name="volume"><option value="">Choose…</option><option>1–5</option><option>6–20</option><option>21–50</option><option>50+</option></select></label>
+        <label>I would like<select id="interest" name="interest" required><option value="demo">15-minute demo</option><option value="pilot">Founder pilot</option><option value="report">Custom area report</option><option value="waitlist">Waitlist for a paid plan</option></select><span id="interestError" class="error" aria-live="polite"></span></label>
+        <label>Area you are evaluating<input id="area" name="area" placeholder="T152N R96W, a DSU case, or a county"><small id="areaHint"></small><span id="areaError" class="error" aria-live="polite"></span></label>
+        <label class="wide">Tools you use today<input name="currentTools" placeholder="e.g. NDIC subscription, WellDatabase, spreadsheets"></label>
+        <label class="wide">What decision sends you looking for well and production records?<textarea name="notes" rows="3"></textarea></label>
+        <label class="trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+      </div>
+      <button type="submit" class="primary large">Send request</button>
+      <p id="formStatus" class="status" role="status"></p>
+    </form>
+  </section>
+
+  <section id="limits" class="limits" aria-labelledby="limitsTitle">
+    <h2 id="limitsTitle">Data sources and limitations</h2>
+    <ul>
+      <li>Survey, operator, production and spacing-unit records come from <a href="https://gis.dmr.nd.gov/gisdownload.asp" rel="noopener">North Dakota DMR public downloads</a>. Each view states its snapshot date.</li>
+      <li>This is research tooling. It is not a reserve estimate, title opinion or economic valuation.</li>
+      <li>DSU depth boxes and lateral-footage scenarios are approximate, editable display models, not legal boundaries or drillable-location counts.</li>
+      <li>Missing production stays missing; it is never shown as zero. Incomplete survey trajectories are not filled in.</li>
+    </ul>
+  </section>
+</main>
+
+<footer><span>© 2026 Bakken Subsurface Analytics</span><span>State outline and places: U.S. Census TIGERweb</span></footer>
+<script type="module" src="main.js"></script>
+</body>
+</html>
