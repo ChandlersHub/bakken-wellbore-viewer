@@ -50,7 +50,7 @@ def main():
             if request.path=='/':
                 self.send_response(302);self.send_header('Location','/viewer/?dataset=full&gamma=1');self.end_headers();return
             target=(PACKAGE/urllib.parse.unquote(request.path).lstrip('/')).resolve()
-            allowed=any(target.is_relative_to((PACKAGE/name).resolve()) for name in ('viewer','full-dataset'))
+            allowed=any(target.is_relative_to((PACKAGE/name).resolve()) for name in ('viewer','full-dataset','site'))
             if not allowed:
                 self.send_error(404);return
             return super().do_GET()

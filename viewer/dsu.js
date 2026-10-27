@@ -55,7 +55,7 @@ export function createDSUController(root,{focus,say,selectionChanged=()=>{},foot
     const index=displayed.indexOf(unit);if(index<0)return;
     const r=batch.ranges[index],vertices=edges.geometry.attributes.position.array.slice(r.edgeStart*3,r.edgeEnd*3),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(vertices,3));
     highlight=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:'#ffffff',transparent:true,opacity:.95,depthTest:false}));highlight.renderOrder=4;group.add(highlight);
-    const host=$('dsuSelection');host.replaceChildren();const tag=document.createElement('div');tag.className='eyebrow';tag.textContent='SELECTED DSU';const title=document.createElement('h3');title.textContent=unit.properties.label;
+    const host=$('dsuSelection');host.replaceChildren();host.setAttribute('data-unit',unit.id);const tag=document.createElement('div');tag.className='eyebrow';tag.textContent='SELECTED DSU';const title=document.createElement('h3');title.textContent=unit.properties.label;
     const zoom=document.createElement('button');zoom.className='primary';zoom.textContent='Zoom to DSU';zoom.onclick=()=>focus(bounds(unit));
     const isolate=document.createElement('button');isolate.textContent=filter==='selected'?'Show all DSUs':'Show only this DSU';isolate.onclick=()=>{filter=filter==='selected'?'all':'selected';$('dsuFilter').value=filter;render();results()};
     const p=unit.properties,[top,bottom]=zoneInterval(p.zone,topOffset,bottomOffset),dl=document.createElement('dl');

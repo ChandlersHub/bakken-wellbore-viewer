@@ -49,6 +49,24 @@ python -m http.server 65119 --bind 127.0.0.1
 
 Then open `http://127.0.0.1:65119/viewer/?dataset=full`. Prepared data is still required; GR/CBL API routes are unavailable on the static server.
 
+## Marketing site and lead capture
+
+`site/` is a static landing page for customer acquisition: positioning, the Founder Pilot offer, early-access pricing, a demo/pilot request form and the data limitations. It is plain HTML/ES modules and can be hosted on any static host next to `viewer/`. Locally, `python serve.py` also serves it at `/site/`, or use the static server above and open `http://127.0.0.1:65119/site/`.
+
+Edit `site/config.js` before publishing:
+
+- `leadEndpoint`: URL that accepts the request as a JSON POST (a form service or your own API). When empty, the form opens a prefilled email to `contactEmail`; when both are empty it reports that requests are not configured.
+- `plausibleDomain`: enables Plausible analytics. Funnel events (`CTA Click`, `Lead Submitted`, `Lead Failed`, `Share View`) are also dispatched as `bakken:track` DOM events for any other tool.
+- `plans`, `plannedPlans`, `snapshot`: prices are experiments and coverage counts follow each data refresh, so they live in config rather than markup.
+- `explorerUrl`: the Free Explorer entry; a hosted copy must include `viewer/data/showcase/`.
+
+Requests carry first-touch `utm_*`/`ref` attribution so lead-to-demo can be measured by channel. The viewer header adds **Request a pilot** (target set by the `bakken:pilot-url` meta tag in `viewer/index.html`) and **Share view**, which copies a link restoring the color mode, footage inventory scenario and selected DSU.
+
+```sh
+node tests/site-lead.mjs
+node tests/share-url.mjs
+```
+
 ## Preparing survey data
 
 The local data was refreshed from the [ND DMR GIS downloads](https://gis.dmr.nd.gov/gisdownload.asp) dated October 17, 2026. The refreshed local survey contains 48,929 branches, 22,498 permit/API10 wells and 5,495,609 retained stations. Download `OGD_Wells.zip` for reported operators and `OGD_Horizontals.zip` for station geometry. Prepared data remains local.
